@@ -47,9 +47,9 @@ resource "google_storage_bucket_object" "source" {
   lifecycle {
     create_before_destroy = true
     // The content hash in `name` is what decides replacement. The zip path differs between
-    // environments and the zip bytes differ between builds, and replacing an object under the
-    // same name would delete the freshly uploaded copy.
-    ignore_changes = [source, detect_md5hash]
+    // environments, and replacing the object under the same name (which a `source` change would
+    // force) would delete the freshly uploaded copy.
+    ignore_changes = [source]
   }
 }
 
