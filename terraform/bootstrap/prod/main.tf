@@ -1,6 +1,6 @@
-// Prerequisites for CI, applied from a local machine by a project admin (initial setup and rare changes):
-// Workload Identity Federation and the deployer service account that GitHub Actions impersonates.
-// Kept out of the CI-applied environment so that CI cannot change its own credentials or project IAM.
+// CI の前提となるリソース。プロジェクトの管理者がローカルから apply する（初回とまれな変更のみ）。
+// Workload Identity Federation と、GitHub Actions が借用するデプロイ用サービスアカウントを含む。
+// CI が自身の認証情報やプロジェクトの IAM を変更できないよう、CI が apply する環境からは分けている。
 terraform {
   required_version = ">= 1.7"
   required_providers {
@@ -27,12 +27,12 @@ module "github_actions_wif" {
   deploy_branch     = "main"
   deployer_roles = [
     "roles/editor",
-    // editor cannot set IAM policies; needed for the Pub/Sub topic binding of Cloud Scheduler
+    // editor では IAM ポリシーを設定できない。Cloud Scheduler 用の Pub/Sub topic への権限付与に必要
     "roles/pubsub.admin",
   ]
 }
 
-// Project IAM needed to build the function; CI cannot grant it because the deployer has no IAM rights
+// 関数のビルドに必要なプロジェクトの IAM。デプロイ用 SA には IAM の権限がないため CI では付与できない
 module "function_build_iam" {
   source = "../../modules/function_build_iam"
 

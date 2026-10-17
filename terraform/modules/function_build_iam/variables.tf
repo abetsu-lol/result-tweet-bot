@@ -1,10 +1,10 @@
 variable "project" {
-  description = "GCP project id"
+  description = "GCP プロジェクト ID"
   type        = string
 }
 
 variable "roles" {
-  description = "Project roles granted to the Cloud Build service account (the Compute Engine default service account)"
+  description = "Cloud Build が使うサービスアカウント（Compute Engine のデフォルト SA）に付与するプロジェクトのロール"
   type        = list(string)
   default     = ["roles/run.builder"]
 }

@@ -1,11 +1,11 @@
 import base64
 
 def daily_job(event, context):
-    """Pub/Sub-triggered Cloud Function entry point.
+    """Pub/Sub トリガーで起動される Cloud Function のエントリポイント。
 
     Args:
-      event (dict): Event payload. `event['data']` is base64-encoded string if present.
-      context: Metadata for the event.
+      event (dict): イベントのペイロード。`event['data']` がある場合は base64 エンコードされた文字列。
+      context: イベントのメタデータ。
     """
     payload = ""
     if event and 'data' in event:
@@ -14,5 +14,5 @@ def daily_job(event, context):
         except Exception:
             payload = str(event['data'])
     print("Running daily job. payload=", payload)
-    # TODO: implement your task here
+    # TODO: ここに処理を実装する
     return 'ok'

@@ -1,9 +1,9 @@
 variable "project" {
-  description = "GCP project id"
+  description = "GCP プロジェクト ID"
   type        = string
 }
 
 variable "github_repository" {
-  description = "GitHub repository in the form 'owner/repo' that is allowed to deploy via Workload Identity Federation"
+  description = "Workload Identity Federation 経由でのデプロイを許可する GitHub リポジトリ（'owner/repo' 形式）"
   type        = string
 }

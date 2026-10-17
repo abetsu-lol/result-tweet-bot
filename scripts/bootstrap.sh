@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Usage: ./scripts/bootstrap.sh [PROJECT] [REGION]
-# Creates (or updates the settings of) the GCS bucket that holds Terraform state.
-# PROJECT defaults to the current gcloud project, REGION to asia-northeast1.
-# The bucket name defaults to terraform-state-<PROJECT>; override it with TFSTATE_BUCKET.
-# Safe to re-run: existing state objects are never touched.
+# 使い方: ./scripts/bootstrap.sh [PROJECT] [REGION]
+# Terraform の state を保存する GCS バケットを作成する（既にあれば設定を更新する）。
+# PROJECT の既定値は gcloud の現在のプロジェクト、REGION の既定値は asia-northeast1。
+# バケット名の既定値は terraform-state-<PROJECT>。TFSTATE_BUCKET で変更できる。
+# 何度実行しても安全（既存の state オブジェクトには触れない）。
 
 PROJECT="${1:-$(gcloud config get-value project --quiet 2>/dev/null || true)}"
 REGION="${2:-asia-northeast1}"
@@ -22,7 +22,7 @@ else
     --uniform-bucket-level-access --public-access-prevention
 fi
 
-# Keep previous versions of the state so it can be restored; only noncurrent versions are ever deleted.
+# 復元できるよう state の過去の版を残す。自動削除の対象は古い版（noncurrent）のみ。
 LIFECYCLE_FILE="$(mktemp)"
 trap 'rm -f "$LIFECYCLE_FILE"' EXIT
 cat > "$LIFECYCLE_FILE" <<'JSON'
