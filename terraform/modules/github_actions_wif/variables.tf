@@ -3,8 +3,8 @@ variable "project" {
   type        = string
 }
 
-variable "service_name" {
-  description = "Prefix of the service account id"
+variable "name" {
+  description = "Prefix of the deployer service account id (<name>-deployer, at most 30 characters in total)"
   type        = string
 }
 
@@ -19,13 +19,7 @@ variable "deploy_branch" {
   default     = "main"
 }
 
-variable "ci_roles" {
-  description = "Project roles granted to the GitHub Actions service account so that CI can run terraform apply"
+variable "deployer_roles" {
+  description = "Project roles granted to the deployer service account"
   type        = list(string)
-}
-
-variable "create_github_binding" {
-  description = "If true, create the IAM binding that grants the GitHub principal access to the service account."
-  type        = bool
-  default     = true
 }

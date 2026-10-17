@@ -8,7 +8,7 @@ variable "region" {
   type        = string
 }
 
-variable "service_name" {
+variable "name" {
   description = "Name of the function; also used as the prefix of related resources"
   type        = string
 }

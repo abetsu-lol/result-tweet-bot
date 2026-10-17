@@ -58,5 +58,4 @@ jobs:
       run: |
         terraform apply -auto-approve -input=false \
           -var="project=${{ vars.GCP_PROJECT_ID }}" \
-          -var="region=${{ vars.GCP_REGION }}" \
-          -var="github_repository=${{ github.repository }}"
+          -var="region=${{ vars.GCP_REGION }}"

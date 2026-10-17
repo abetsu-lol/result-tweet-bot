@@ -5,16 +5,27 @@
 ```
 cloud_function/   アプリ本体（エントリポイント: daily_job(event, context)）
 terraform/
-  environments/prod/  環境ごとのルート（backend・provider・モジュール呼び出しと設定値）
+  bootstrap/prod/     CI の前提となるリソース（WIF・デプロイ用サービスアカウント）。ローカルから apply
+  environments/prod/  アプリのリソース（Cloud Function・Pub/Sub・Cloud Scheduler）。CI から apply
   modules/scheduled_function/  Cloud Function + Pub/Sub + Cloud Scheduler
-  modules/github_actions_wif/  GitHub Actions 用 Workload Identity Federation とサービスアカウント
+  modules/github_actions_wif/  GitHub Actions 用 Workload Identity Federation とデプロイ用サービスアカウント
 scripts/          tfstate 用バケットの作成（bootstrap）・パッケージング用スクリプト
-.github/workflows/deploy.yml  main への push で terraform apply
+.github/workflows/deploy.yml  main への push で terraform/environments/prod を apply
 ```
 
 コードには特定の環境の値（プロジェクト ID・バケット名など）を含めていません。値はすべて GitHub リポジトリの設定から渡します。
 GitHub Actions は、**ワークフローを実行するリポジトリに設定された Variables の GCP プロジェクト**にデプロイします。
 fork（または clone して自分のリポジトリに push）し、以下の手順で設定すれば自分の環境で同じように動かせます。
+
+## 構成の考え方
+
+| | 内容 | apply する場所 | state（tfstate 用バケット内の prefix） |
+| --- | --- | --- | --- |
+| tfstate 用バケット | `scripts/bootstrap.sh`（gcloud） | ローカル | — |
+| `terraform/bootstrap/prod` | WIF プール / プロバイダ、デプロイ用サービスアカウントとその権限 | ローカル（初回とまれな変更のみ） | `terraform/bootstrap` |
+| `terraform/environments/prod` | Cloud Function・Pub/Sub・Cloud Scheduler | CI | `terraform/state` |
+
+CI の認証情報と IAM は CI の管理対象外にしているため、デプロイ用サービスアカウントにはプロジェクトの IAM を変更する権限がありません。
 
 ## 設定項目
 
@@ -30,21 +41,21 @@ Environment `prod` を作成し、Deployment branches を `main` のみに制限
 | Environment `prod` の Variable | `GCP_PROJECT_ID` | GCP プロジェクト ID | |
 | Environment `prod` の Variable | `GCP_REGION` | リージョン（例: `asia-northeast1`） | |
 | Environment `prod` の Variable | `TF_STATE_BUCKET` | tfstate 用バケット名 | `scripts/bootstrap.sh` の出力 |
-| Environment `prod` の Variable | `GCP_WORKLOAD_PROVIDER` | WIF プロバイダのフルリソース名 | 初回 apply 後の `terraform output -raw wif_provider` |
-| Environment `prod` の Variable | `GCP_SA_EMAIL` | GitHub Actions 用サービスアカウントのメールアドレス | 初回 apply 後の `terraform output -raw github_actions_sa_email` |
+| Environment `prod` の Variable | `GCP_WORKLOAD_PROVIDER` | WIF プロバイダのフルリソース名 | `terraform/bootstrap/prod` の `terraform output -raw wif_provider` |
+| Environment `prod` の Variable | `GCP_SA_EMAIL` | デプロイ用サービスアカウントのメールアドレス | `terraform/bootstrap/prod` の `terraform output -raw deployer_service_account_email` |
 
 Terraform の変数との対応:
 
 | Terraform 変数 | 値の出どころ |
 | --- | --- |
-| `project` | `GCP_PROJECT_ID` |
-| `region` | `GCP_REGION` |
-| `github_repository` | ワークフローを実行しているリポジトリ（`github.repository`）を自動で使用 |
-| `service_name`・`schedule`・`deploy_branch`・`ci_roles` ほか | `terraform/environments/prod/main.tf` のモジュール引数。変える場合は編集して push |
+| `environments/prod`: `project` / `region` | `GCP_PROJECT_ID` / `GCP_REGION` |
+| `bootstrap/prod`: `project` / `github_repository` | ローカルでの apply 時に `-var` で指定 |
+| リソース名（`name`）・スケジュール・デプロイ用ブランチ・デプロイ用サービスアカウントのロールほか | 各ルートの `main.tf` のモジュール引数。変える場合は編集する |
 
 ## 自分の環境にデプロイする
 
-前提: GCP プロジェクト（課金有効）、`gcloud`、Terraform >= 1.5、GitHub リポジトリ、bash（Windows では Git Bash）。
+前提: GCP プロジェクト（課金有効）、`gcloud`、Terraform >= 1.7、GitHub リポジトリ、bash（Windows では Git Bash）。
+ローカルでの作業はプロジェクトのオーナー権限で行います。
 
 ### 1. tfstate 用バケットを作成（ローカル・初回のみ）
 
@@ -56,21 +67,21 @@ gcloud auth login
 バージョニング有効のバケットを作成し、`TF_STATE_BUCKET` に設定する値を表示します。
 何度実行しても安全です（既存バケットは設定の更新のみで、state には触れません）。
 state の過去の版はバージョニングで保持され、古い版（新しい版が 5 つ以上ある、または古い版になって 90 日経過）だけが自動削除されます。
-誤って壊した場合は `gcloud storage ls -a gs://<bucket>/terraform/state/` で過去の版を確認して復元できます。
+誤って壊した場合は `gcloud storage ls -a gs://<bucket>/terraform/` で過去の版を確認して復元できます。
 
-### 2. 初回 apply（ローカル・初回のみ）
+### 2. WIF とデプロイ用サービスアカウントを作成（ローカル・初回とまれな変更のみ）
 
-CI が GCP に認証するための WIF とサービスアカウントはこの apply で作られるため、最初の 1 回だけはローカルから実行します。
 値はファイルに保存せず、引数で渡します。
 
 ```bash
 gcloud auth application-default login
-./scripts/package_function.sh
-cd terraform/environments/prod
-terraform init -backend-config="bucket=YOUR_TF_STATE_BUCKET" -backend-config="prefix=terraform/state"
-terraform apply   -var="project=YOUR_PROJECT_ID"   -var="region=asia-northeast1"   -var="github_repository=OWNER/REPO"     # このリポジトリ。GitHub 上の名前と完全に一致させる
+cd terraform/bootstrap/prod
+terraform init -backend-config="bucket=YOUR_TF_STATE_BUCKET" -backend-config="prefix=terraform/bootstrap"
+terraform apply \
+  -var="project=YOUR_PROJECT_ID" \
+  -var="github_repository=OWNER/REPO"     # このリポジトリ。GitHub 上の名前と完全に一致させる
 terraform output -raw wif_provider; echo
-terraform output -raw github_actions_sa_email; echo
+terraform output -raw deployer_service_account_email; echo
 ```
 
 ### 3. GitHub リポジトリの設定
@@ -80,15 +91,16 @@ fork の場合は Actions タブからワークフローを有効にしてくだ
 
 ### 4. 以降
 
-`main` に push すると `.github/workflows/deploy.yml` が `cloud_function/` を zip にして `terraform apply` します。
+`main` に push すると `.github/workflows/deploy.yml` が `cloud_function/` を zip にして `terraform/environments/prod` を `terraform apply` します。
+初回のアプリのリソース作成も CI で行われます（Actions タブの Deploy から手動実行も可能）。
 ソースが変わると GCS 上のオブジェクト名（内容ハッシュ）が変わり、関数が再デプロイされます。
-インフラの変更も同様に push で反映し、ローカルからの plan / apply は行いません。
+`environments/prod` の変更も同様に push で反映し、ローカルからの plan / apply は行いません。
 
 ## セキュリティ
 
 - Workload Identity Federation で、`github_repository` の `deploy_branch`（既定 `main`）で動くワークフローだけが認証できます。fork や Pull Request からは認証できません。
-- ワークフローは `pull_request` では実行しません。
-- CI 用サービスアカウントには `terraform apply` のため `roles/editor`・`roles/iam.securityAdmin`・`roles/iam.workloadIdentityPoolAdmin` を付与しています（`ci_roles` で変更可能）。IAM を管理できる強い権限なので、個人用プロジェクトで使うことを想定しています。
+- ワークフローは `pull_request` では実行せず、Environment `prod` は `main` ブランチからのみ使用できます。
+- デプロイ用サービスアカウントのロールは `roles/editor` と `roles/pubsub.admin`（Cloud Scheduler が topic に publish するための権限付与に必要）のみです。プロジェクトの IAM や WIF は変更できません。
 
 ## ローカルでの動作確認
 
