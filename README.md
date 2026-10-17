@@ -15,7 +15,7 @@ fork（または clone して自分のリポジトリに push）し、以下の�
 
 ## 自分の環境にデプロイする
 
-前提: GCP プロジェクト（課金有効）、`gcloud`、Terraform >= 1.5、GitHub リポジトリ。
+前提: GCP プロジェクト（課金有効）、`gcloud`、Terraform >= 1.5、GitHub リポジトリ、bash（Windows では Git Bash）。
 
 ### 1. 初回セットアップ（ローカル）
 
@@ -27,12 +27,12 @@ gcloud config set project YOUR_PROJECT_ID
 
 # tfstate 用バケット（バージョニング有効）を作成し、terraform/backend.hcl を生成
 # 引数: [PROJECT] [REGION]、バケット名は TFSTATE_BUCKET で変更可（既定: terraform-state-<PROJECT>）
-./scripts/bootstrap.sh                 # PowerShell: .\scripts\bootstrap.ps1 [-Project ...] [-Region ...] [-Bucket ...]
+./scripts/bootstrap.sh
 
 # 変数を設定（github_repository は自分のリポジトリ "owner/repo"）
 cp terraform/terraform.tfvars.example terraform/terraform.tfvars
 
-./scripts/package_function.sh          # PowerShell: .\scripts\package_function.ps1
+./scripts/package_function.sh
 cd terraform
 terraform init -backend-config=backend.hcl
 terraform apply
