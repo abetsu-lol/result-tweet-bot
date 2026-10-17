@@ -1,37 +1,44 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Usage: ./scripts/bootstrap.sh
-# This script uses gcloud to get the current project and creates terraform/bootstrap/terraform.tfvars
-# then runs terraform init/apply non-interactively to create the GCS backend bucket.
+# Usage: ./scripts/bootstrap.sh [PROJECT] [REGION]
+# Creates (or updates the settings of) the GCS bucket that holds Terraform state, then writes terraform/backend.hcl.
+# PROJECT defaults to the current gcloud project, REGION to asia-northeast1.
+# The bucket name defaults to terraform-state-<PROJECT>; override it with TFSTATE_BUCKET.
+# Safe to re-run: existing state objects are never touched.
 
-PROJECT=$(gcloud config get-value project --quiet || true)
+ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+PROJECT="${1:-$(gcloud config get-value project --quiet 2>/dev/null || true)}"
+REGION="${2:-asia-northeast1}"
 if [ -z "$PROJECT" ]; then
-  echo "gcloud project not set. Run: gcloud init or gcloud config set project YOUR_PROJECT_ID"
+  echo "Project not specified. Run: ./scripts/bootstrap.sh YOUR_PROJECT_ID (or gcloud config set project YOUR_PROJECT_ID)" >&2
   exit 1
 fi
+BUCKET="${TFSTATE_BUCKET:-terraform-state-${PROJECT}}"
 
-BUCKET=${TFSTATE_BUCKET:-"terraform-state-${PROJECT}"}
-TFVARS_DIR="terraform/bootstrap"
-TFVARS_FILE="$TFVARS_DIR/terraform.tfvars"
+if gcloud storage buckets describe "gs://${BUCKET}" --project="$PROJECT" >/dev/null 2>&1; then
+  echo "Bucket gs://${BUCKET} already exists; updating its settings."
+else
+  gcloud storage buckets create "gs://${BUCKET}" --project="$PROJECT" --location="$REGION" \
+    --uniform-bucket-level-access --public-access-prevention
+fi
 
-cat > "$TFVARS_FILE" <<EOF
-project = "${PROJECT}"
-backend_bucket = "${BUCKET}"
-region = "asia-northeast1"
-EOF
+# Keep previous versions of the state so it can be restored; only noncurrent versions are ever deleted.
+LIFECYCLE_FILE="$(mktemp)"
+trap 'rm -f "$LIFECYCLE_FILE"' EXIT
+cat > "$LIFECYCLE_FILE" <<'JSON'
+{"rule": [
+  {"action": {"type": "Delete"}, "condition": {"isLive": false, "numNewerVersions": 5}},
+  {"action": {"type": "Delete"}, "condition": {"isLive": false, "daysSinceNoncurrentTime": 90}}
+]}
+JSON
+gcloud storage buckets update "gs://${BUCKET}" --project="$PROJECT" \
+  --versioning --uniform-bucket-level-access --public-access-prevention --lifecycle-file="$LIFECYCLE_FILE"
 
-echo "Created $TFVARS_FILE with project=${PROJECT} backend_bucket=${BUCKET}"
-
-pushd "$TFVARS_DIR" >/dev/null
-terraform init
-terraform apply -auto-approve
-popd >/dev/null
-
-BACKEND_FILE="terraform/backend.hcl"
+BACKEND_FILE="$ROOT_DIR/terraform/backend.hcl"
 cat > "$BACKEND_FILE" <<EOF
 bucket = "${BUCKET}"
 prefix = "terraform/state"
 EOF
 
-echo "Bootstrap complete. Created $BACKEND_FILE. Next, run: terraform init -backend-config=backend.hcl in the terraform/ directory."
+echo "Bootstrap complete. Wrote $BACKEND_FILE. Next: cd terraform && terraform init -backend-config=backend.hcl"

@@ -5,8 +5,7 @@
 ```
 cloud_function/   アプリ本体（エントリポイント: daily_job(event, context)）
 terraform/        Cloud Function / Pub/Sub / Cloud Scheduler / Workload Identity Federation
-terraform/bootstrap/  tfstate 用 GCS バケット（初回のみ）
-scripts/          bootstrap・パッケージング用スクリプト
+scripts/          tfstate 用バケットの作成（bootstrap）・パッケージング用スクリプト
 .github/workflows/deploy.yml  main への push で terraform apply
 ```
 
@@ -26,8 +25,9 @@ CI が GCP に認証するための WIF とサービスアカウントはまだ�
 gcloud auth application-default login
 gcloud config set project YOUR_PROJECT_ID
 
-# tfstate 用バケットを作成し、terraform/backend.hcl を生成
-./scripts/bootstrap.sh                 # PowerShell: .\scripts\bootstrap.ps1
+# tfstate 用バケット（バージョニング有効）を作成し、terraform/backend.hcl を生成
+# 引数: [PROJECT] [REGION]、バケット名は TFSTATE_BUCKET で変更可（既定: terraform-state-<PROJECT>）
+./scripts/bootstrap.sh                 # PowerShell: .\scripts\bootstrap.ps1 [-Project ...] [-Region ...] [-Bucket ...]
 
 # 変数を設定（github_repository は自分のリポジトリ "owner/repo"）
 cp terraform/terraform.tfvars.example terraform/terraform.tfvars
@@ -40,6 +40,10 @@ terraform output                       # wif_provider と github_actions_sa_emai
 ```
 
 `terraform.tfvars`・`backend.hcl`・tfstate は Git 管理外です。
+
+bootstrap は何度実行しても安全です（既存バケットは設定の更新のみで、state には触れません）。
+state の過去の版はバージョニングで保持され、古い版（新しい版が 5 つ以上ある、または古い版になって 90 日経過）だけが自動削除されます。
+誤って壊した場合は `gcloud storage ls -a gs://<bucket>/terraform/state/` で過去の版を確認して復元できます。
 
 ### 2. GitHub リポジトリの設定
 
