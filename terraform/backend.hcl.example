@@ -1,2 +1,0 @@
-bucket = "terraform-state-your-gcp-project-id"
-prefix = "terraform/state"

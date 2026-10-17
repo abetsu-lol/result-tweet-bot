@@ -1,3 +1,0 @@
-project           = "your-gcp-project-id"
-region            = "asia-northeast1"
-github_repository = "your-github-user/result-tweet-bot"

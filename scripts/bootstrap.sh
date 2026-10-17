@@ -2,12 +2,11 @@
 set -euo pipefail
 
 # Usage: ./scripts/bootstrap.sh [PROJECT] [REGION]
-# Creates (or updates the settings of) the GCS bucket that holds Terraform state, then writes terraform/backend.hcl.
+# Creates (or updates the settings of) the GCS bucket that holds Terraform state.
 # PROJECT defaults to the current gcloud project, REGION to asia-northeast1.
 # The bucket name defaults to terraform-state-<PROJECT>; override it with TFSTATE_BUCKET.
 # Safe to re-run: existing state objects are never touched.
 
-ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 PROJECT="${1:-$(gcloud config get-value project --quiet 2>/dev/null || true)}"
 REGION="${2:-asia-northeast1}"
 if [ -z "$PROJECT" ]; then
@@ -35,10 +34,4 @@ JSON
 gcloud storage buckets update "gs://${BUCKET}" --project="$PROJECT" \
   --versioning --uniform-bucket-level-access --public-access-prevention --lifecycle-file="$LIFECYCLE_FILE"
 
-BACKEND_FILE="$ROOT_DIR/terraform/backend.hcl"
-cat > "$BACKEND_FILE" <<EOF
-bucket = "${BUCKET}"
-prefix = "terraform/state"
-EOF
-
-echo "Bootstrap complete. Wrote $BACKEND_FILE. Next: cd terraform && terraform init -backend-config=backend.hcl"
+echo "Bootstrap complete. Set the GitHub repository variable TF_STATE_BUCKET=${BUCKET}"
