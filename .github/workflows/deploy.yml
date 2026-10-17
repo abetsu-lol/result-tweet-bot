@@ -1,10 +1,10 @@
 name: Deploy
 
 # Deploys to whichever GCP project the repository running this workflow is configured for.
-# Forks: set the variables/secrets below in your own repository (see README) to deploy to your own project.
+# Forks: set the variables below in your own repository (see README) to deploy to your own project.
 #
-# Repository variables: DEPLOY_ENABLED ("true"), GCP_PROJECT_ID, GCP_REGION, TF_STATE_BUCKET
-# Repository secrets:   GCP_WORKLOAD_PROVIDER, GCP_SA_EMAIL
+# Repository variable:        DEPLOY_ENABLED ("true")
+# Environment "prod" variables: GCP_PROJECT_ID, GCP_REGION, TF_STATE_BUCKET, GCP_WORKLOAD_PROVIDER, GCP_SA_EMAIL
 
 on:
   push:
@@ -21,8 +21,10 @@ concurrency:
 
 jobs:
   deploy:
-    # Skip in repositories (e.g. fresh forks) that have not been set up for deployment
+    # Skip in repositories (e.g. fresh forks) that have not been set up for deployment.
+    # This must be a repository variable: environment variables are not available in a job-level `if`.
     if: vars.DEPLOY_ENABLED == 'true'
+    environment: prod
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -35,8 +37,8 @@ jobs:
     - name: Authenticate to GCP using Workload Identity
       uses: google-github-actions/auth@v2
       with:
-        workload_identity_provider: ${{ secrets.GCP_WORKLOAD_PROVIDER }}
-        service_account: ${{ secrets.GCP_SA_EMAIL }}
+        workload_identity_provider: ${{ vars.GCP_WORKLOAD_PROVIDER }}
+        service_account: ${{ vars.GCP_SA_EMAIL }}
 
     - name: Package Cloud Function
       run: ./scripts/package_function.sh

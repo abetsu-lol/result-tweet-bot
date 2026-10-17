@@ -13,22 +13,25 @@ scripts/          tfstate 用バケットの作成（bootstrap）・パッケー
 ```
 
 コードには特定の環境の値（プロジェクト ID・バケット名など）を含めていません。値はすべて GitHub リポジトリの設定から渡します。
-GitHub Actions は、**ワークフローを実行するリポジトリに設定された Variables / Secrets の GCP プロジェクト**にデプロイします。
+GitHub Actions は、**ワークフローを実行するリポジトリに設定された Variables の GCP プロジェクト**にデプロイします。
 fork（または clone して自分のリポジトリに push）し、以下の手順で設定すれば自分の環境で同じように動かせます。
 
 ## 設定項目
 
-デプロイに必要な値はすべて GitHub リポジトリの設定（Settings → Secrets and variables → Actions）に置きます。
+デプロイに必要な値はすべて GitHub リポジトリの設定（Settings → Secrets and variables → Actions / Settings → Environments）に置きます。
 リポジトリ内に環境ごとの設定ファイル（tfvars など）はありません。
+いずれも機密情報ではないため Variables に置いています（公開リポジトリでは Actions のログに値が表示されます）。
 
-| 種類 | 名前 | 値 | 取得元 |
+Environment `prod` を作成し、Deployment branches を `main` のみに制限したうえで、以下を設定します。
+
+| 置き場所 | 名前 | 値 | 取得元 |
 | --- | --- | --- | --- |
-| Variable | `DEPLOY_ENABLED` | `true` | 未設定のリポジトリではデプロイジョブはスキップされる |
-| Variable | `GCP_PROJECT_ID` | GCP プロジェクト ID | |
-| Variable | `GCP_REGION` | リージョン（例: `asia-northeast1`） | |
-| Variable | `TF_STATE_BUCKET` | tfstate 用バケット名 | `scripts/bootstrap.sh` の出力 |
-| Secret | `GCP_WORKLOAD_PROVIDER` | WIF プロバイダのフルリソース名 | 初回 apply 後の `terraform output -raw wif_provider` |
-| Secret | `GCP_SA_EMAIL` | GitHub Actions 用サービスアカウントのメールアドレス | 初回 apply 後の `terraform output -raw github_actions_sa_email` |
+| リポジトリの Variable | `DEPLOY_ENABLED` | `true` | 未設定のリポジトリではデプロイジョブはスキップされる。ジョブの `if` で参照するため Environment ではなくリポジトリに置く |
+| Environment `prod` の Variable | `GCP_PROJECT_ID` | GCP プロジェクト ID | |
+| Environment `prod` の Variable | `GCP_REGION` | リージョン（例: `asia-northeast1`） | |
+| Environment `prod` の Variable | `TF_STATE_BUCKET` | tfstate 用バケット名 | `scripts/bootstrap.sh` の出力 |
+| Environment `prod` の Variable | `GCP_WORKLOAD_PROVIDER` | WIF プロバイダのフルリソース名 | 初回 apply 後の `terraform output -raw wif_provider` |
+| Environment `prod` の Variable | `GCP_SA_EMAIL` | GitHub Actions 用サービスアカウントのメールアドレス | 初回 apply 後の `terraform output -raw github_actions_sa_email` |
 
 Terraform の変数との対応:
 
@@ -72,7 +75,7 @@ terraform output -raw github_actions_sa_email; echo
 
 ### 3. GitHub リポジトリの設定
 
-[設定項目](#設定項目) の Variables / Secrets をすべて設定します。
+[設定項目](#設定項目) の Environment と Variables をすべて設定します。
 fork の場合は Actions タブからワークフローを有効にしてください（fork では既定で無効）。
 
 ### 4. 以降
