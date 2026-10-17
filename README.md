@@ -4,7 +4,10 @@
 
 ```
 cloud_function/   アプリ本体（エントリポイント: daily_job(event, context)）
-terraform/        Cloud Function / Pub/Sub / Cloud Scheduler / Workload Identity Federation
+terraform/
+  environments/prod/  環境ごとのルート（backend・provider・モジュール呼び出しと設定値）
+  modules/scheduled_function/  Cloud Function + Pub/Sub + Cloud Scheduler
+  modules/github_actions_wif/  GitHub Actions 用 Workload Identity Federation とサービスアカウント
 scripts/          tfstate 用バケットの作成（bootstrap）・パッケージング用スクリプト
 .github/workflows/deploy.yml  main への push で terraform apply
 ```
@@ -34,7 +37,7 @@ Terraform の変数との対応:
 | `project` | `GCP_PROJECT_ID` |
 | `region` | `GCP_REGION` |
 | `github_repository` | ワークフローを実行しているリポジトリ（`github.repository`）を自動で使用 |
-| `service_name`・`deploy_branch`・`ci_roles` ほか | `terraform/variables.tf` の既定値。変える場合は既定値を編集して push |
+| `service_name`・`schedule`・`deploy_branch`・`ci_roles` ほか | `terraform/environments/prod/main.tf` のモジュール引数。変える場合は編集して push |
 
 ## 自分の環境にデプロイする
 
@@ -60,7 +63,7 @@ CI が GCP に認証するための WIF とサービスアカウントはこの 
 ```bash
 gcloud auth application-default login
 ./scripts/package_function.sh
-cd terraform
+cd terraform/environments/prod
 terraform init -backend-config="bucket=YOUR_TF_STATE_BUCKET" -backend-config="prefix=terraform/state"
 terraform apply   -var="project=YOUR_PROJECT_ID"   -var="region=asia-northeast1"   -var="github_repository=OWNER/REPO"     # このリポジトリ。GitHub 上の名前と完全に一致させる
 terraform output -raw wif_provider; echo

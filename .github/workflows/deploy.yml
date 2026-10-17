@@ -45,14 +45,14 @@ jobs:
       uses: hashicorp/setup-terraform@v3
 
     - name: Terraform Init
-      working-directory: terraform
+      working-directory: terraform/environments/prod
       run: |
         terraform init -input=false \
           -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}" \
           -backend-config="prefix=terraform/state"
 
     - name: Terraform Apply
-      working-directory: terraform
+      working-directory: terraform/environments/prod
       run: |
         terraform apply -auto-approve -input=false \
           -var="project=${{ vars.GCP_PROJECT_ID }}" \

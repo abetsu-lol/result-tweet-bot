@@ -1,4 +1,9 @@
-// `data.google_project.project` is declared in `function.tf`; avoid duplicate declarations.
+// Workload Identity Federation that lets GitHub Actions runs of one repository/branch
+// impersonate a service account with the roles needed to run terraform apply
+
+data "google_project" "project" {
+  project_id = var.project
+}
 
 // Enable required APIs for Workload Identity Federation and Terraform-managed resources
 resource "google_project_service" "iam" {
@@ -20,12 +25,14 @@ resource "google_project_service" "sts" {
 }
 
 resource "google_iam_workload_identity_pool" "github_pool" {
+  project                   = var.project
   workload_identity_pool_id = "github-actions-pool"
   display_name              = "gha-wif-pool"
   description               = "Pool for GitHub Actions OIDC tokens"
 }
 
 resource "google_iam_workload_identity_pool_provider" "github_provider" {
+  project                            = var.project
   workload_identity_pool_id          = google_iam_workload_identity_pool.github_pool.workload_identity_pool_id
   workload_identity_pool_provider_id = "github-provider"
   display_name                       = "GitHub OIDC Provider"
@@ -51,6 +58,7 @@ resource "google_iam_workload_identity_pool_provider" "github_provider" {
 
 // Service account for GitHub Actions to impersonate
 resource "google_service_account" "github_actions_sa" {
+  project      = var.project
   account_id   = "${var.service_name}-gha-sa"
   display_name = "Service account for GitHub Actions (WIF)"
 }
