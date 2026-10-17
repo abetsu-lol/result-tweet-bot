@@ -24,6 +24,20 @@ resource "google_project_service" "sts" {
   disable_on_destroy = false
 }
 
+// APIs that Terraform itself calls when the deployer runs it. Requests made with a service account
+// are attributed to its own project, so these must be enabled here (user credentials do not need them).
+resource "google_project_service" "cloudresourcemanager" {
+  project            = var.project
+  service            = "cloudresourcemanager.googleapis.com"
+  disable_on_destroy = false
+}
+
+resource "google_project_service" "serviceusage" {
+  project            = var.project
+  service            = "serviceusage.googleapis.com"
+  disable_on_destroy = false
+}
+
 resource "google_iam_workload_identity_pool" "github" {
   project                   = var.project
   workload_identity_pool_id = "github-actions-pool"
