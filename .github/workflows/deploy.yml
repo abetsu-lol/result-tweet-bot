@@ -32,10 +32,10 @@ jobs:
 
     steps:
     - name: Checkout
-      uses: actions/checkout@v4
+      uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
     - name: Authenticate to GCP using Workload Identity
-      uses: google-github-actions/auth@v2
+      uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed # v2.1.13
       with:
         workload_identity_provider: ${{ vars.GCP_WORKLOAD_PROVIDER }}
         service_account: ${{ vars.GCP_SA_EMAIL }}
@@ -44,7 +44,7 @@ jobs:
       run: ./scripts/package_function.sh
 
     - name: Setup Terraform
-      uses: hashicorp/setup-terraform@v3
+      uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
 
     - name: Terraform Init
       working-directory: terraform/environments/prod
