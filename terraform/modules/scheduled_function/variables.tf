@@ -24,9 +24,15 @@ variable "source_zip_path" {
 }
 
 variable "runtime" {
-  description = "Cloud Functions runtime"
+  description = "Cloud Functions runtime (1st gen)"
   type        = string
-  default     = "python310"
+  default     = "python312"
+}
+
+variable "image_keep_count" {
+  description = "Number of most recent function images kept in Artifact Registry; older ones are deleted"
+  type        = number
+  default     = 2
 }
 
 variable "entry_point" {

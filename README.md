@@ -7,7 +7,7 @@ cloud_function/   アプリ本体（エントリポイント: daily_job(event, c
 terraform/
   bootstrap/prod/     CI の前提となるリソース（WIF・デプロイ用サービスアカウント）。ローカルから apply
   environments/prod/  アプリのリソース（Cloud Function・Pub/Sub・Cloud Scheduler）。CI から apply
-  modules/scheduled_function/  Cloud Function + Pub/Sub + Cloud Scheduler
+  modules/scheduled_function/  Cloud Function + Pub/Sub + Cloud Scheduler + イメージ用 Artifact Registry（最新 2 件のみ保持）
   modules/github_actions_wif/  GitHub Actions 用 Workload Identity Federation とデプロイ用サービスアカウント
   modules/function_build_iam/  関数のビルドに Cloud Build が使うサービスアカウント（Compute Engine のデフォルト SA）の権限
 scripts/          tfstate 用バケットの作成（bootstrap）・パッケージング用スクリプト
