@@ -1,5 +1,5 @@
-// Cloud Functions のデプロイ時に Cloud Build がビルドで使うサービスアカウントへの権限。
-// 新しいプロジェクトでは Compute Engine のデフォルト SA でビルドされるが、既定ではロールが付いていない。
+// Roles for the service account that Cloud Build uses to build Cloud Functions deployments.
+// New projects build with the Compute Engine default service account, which has no roles by default.
 
 data "google_project" "project" {
   project_id = var.project

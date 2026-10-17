@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# cloud_function/ を build/function.zip に固める（terraform/environments/prod がアップロードする）。
-# タイムスタンプ・権限・順序を固定して再現可能にしている。ソースが同じなら zip も同じバイト列になるため、
-# Terraform が実行のたびにオブジェクトを再アップロードすることはない。
+# Zips cloud_function/ into build/function.zip, which terraform/environments/prod uploads.
+# The zip is reproducible (fixed timestamps, permissions and order): identical sources give an
+# identical zip, so Terraform does not re-upload the object on every run.
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 FUNCTION_DIR="$ROOT_DIR/cloud_function"
 OUT_ZIP="$ROOT_DIR/build/function.zip"

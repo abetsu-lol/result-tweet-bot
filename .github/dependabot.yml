@@ -1,4 +1,4 @@
-# .github/workflows で commit SHA 固定している actions を、PR で最新に保つ
+# Keeps the SHA-pinned actions in .github/workflows up to date via pull requests
 version: 2
 updates:
   - package-ecosystem: github-actions

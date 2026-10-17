@@ -1,4 +1,4 @@
-// Cloud Scheduler から Pub/Sub 経由で定期的に起動される Cloud Function
+// Pub/Sub-triggered Cloud Function invoked on a schedule by Cloud Scheduler
 
 resource "google_project_service" "cloudfunctions" {
   project = var.project
@@ -20,7 +20,7 @@ resource "google_project_service" "storage" {
   service = "storage.googleapis.com"
 }
 
-// Cloud Functions はデプロイのたびに Cloud Build でビルドし、イメージを Artifact Registry に保存する
+// Cloud Functions builds each deployment with Cloud Build and stores the image in Artifact Registry
 resource "google_project_service" "cloudbuild" {
   project            = var.project
   service            = "cloudbuild.googleapis.com"
@@ -33,18 +33,18 @@ resource "google_project_service" "artifactregistry" {
   disable_on_destroy = false
 }
 
-// 関数のビルドで作られるイメージの保存先。自動作成される gcf-artifacts ではなく自前のリポジトリにすることで
-// 古いイメージを削除できる。イメージは 1 つ約 450MB で、ほとんどがランタイムのベースイメージ。
+// Images built for the function. Using our own repository (instead of the auto-created gcf-artifacts)
+// lets old images be cleaned up; each image is ~450MB, mostly the runtime base image.
 resource "google_artifact_registry_repository" "images" {
   project       = var.project
   location      = var.region
   repository_id = "${var.name}-images"
   format        = "DOCKER"
-  description   = "Cloud Function ${var.name} のビルドイメージ"
+  description   = "Images built for the ${var.name} Cloud Function"
 
   cleanup_policy_dry_run = false
 
-  // KEEP は DELETE より優先される。最新のバージョンだけが残る
+  // KEEP takes precedence over DELETE: only the most recent versions survive
   cleanup_policies {
     id     = "keep-recent"
     action = "KEEP"
@@ -71,8 +71,8 @@ resource "google_storage_bucket" "source" {
   uniform_bucket_level_access = true
 }
 
-// ソースが変わるとオブジェクト名が変わり、それによって関数が再デプロイされる。
-// 名前は zip ではなくソースファイルから計算する（zip のバイト列は環境によって変わりうるため）。
+// The object name changes whenever the source changes, which is what makes the function redeploy.
+// It is derived from the source files rather than the zip, whose bytes vary between builds.
 locals {
   function_source_files = sort([
     for f in fileset(var.source_dir, "**") : f
@@ -90,8 +90,9 @@ resource "google_storage_bucket_object" "source" {
 
   lifecycle {
     create_before_destroy = true
-    // 置き換えの要否は `name` に含まれる内容ハッシュで決まる。zip のパスは環境によって異なり、
-    // また（`source` の変更で強制される）同じ名前での置き換えは、アップロードしたばかりのオブジェクトを削除してしまう。
+    // The content hash in `name` is what decides replacement. The zip path differs between
+    // environments, and replacing the object under the same name (which a `source` change would
+    // force) would delete the freshly uploaded copy.
     ignore_changes = [source]
   }
 }
@@ -107,7 +108,7 @@ data "google_project" "project" {
 
 resource "google_cloudfunctions_function" "this" {
   name        = var.name
-  description = "定期実行ジョブの関数"
+  description = "Scheduled job function"
   project     = var.project
   region      = var.region
   runtime     = var.runtime
@@ -133,7 +134,7 @@ resource "google_cloudfunctions_function" "this" {
   ]
 }
 
-// Cloud Scheduler のサービスエージェントに Pub/Sub topic への publish を許可する
+// Allow Cloud Scheduler service agent to publish to Pub/Sub topic
 resource "google_pubsub_topic_iam_member" "scheduler_publisher" {
   project = var.project
   topic   = google_pubsub_topic.trigger.name
@@ -149,7 +150,7 @@ resource "google_cloud_scheduler_job" "daily" {
   project     = var.project
   region      = var.region
   name        = "${var.name}-daily"
-  description = "Pub/Sub 経由で Cloud Function を毎日起動する"
+  description = "Trigger Cloud Function daily via Pub/Sub"
   schedule    = var.schedule
   time_zone   = var.time_zone
 

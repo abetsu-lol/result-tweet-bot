@@ -1,25 +1,25 @@
 variable "project" {
-  description = "GCP プロジェクト ID"
+  description = "GCP project id"
   type        = string
 }
 
 variable "name" {
-  description = "デプロイ用サービスアカウント ID の接頭辞（<name>-deployer。全体で 30 文字以内）"
+  description = "Prefix of the deployer service account id (<name>-deployer, at most 30 characters in total)"
   type        = string
 }
 
 variable "github_repository" {
-  description = "Workload Identity Federation 経由でのデプロイを許可する GitHub リポジトリ（'owner/repo' 形式）"
+  description = "GitHub repository in the form 'owner/repo' that is allowed to deploy via Workload Identity Federation"
   type        = string
 }
 
 variable "deploy_branch" {
-  description = "Workload Identity Federation での認証を許可する GitHub Actions のブランチ"
+  description = "Branch whose GitHub Actions runs are allowed to authenticate via Workload Identity Federation"
   type        = string
   default     = "main"
 }
 
 variable "deployer_roles" {
-  description = "デプロイ用サービスアカウントに付与するプロジェクトのロール"
+  description = "Project roles granted to the deployer service account"
   type        = list(string)
 }

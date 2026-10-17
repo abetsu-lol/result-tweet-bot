@@ -1,10 +1,10 @@
 name: Deploy
 
-# このワークフローを実行するリポジトリに設定された GCP プロジェクトにデプロイする。
-# fork した場合は、自分のリポジトリに以下の変数を設定すれば自分のプロジェクトにデプロイできる（README 参照）。
+# Deploys to whichever GCP project the repository running this workflow is configured for.
+# Forks: set the variables below in your own repository (see README) to deploy to your own project.
 #
-# リポジトリの Variable:          DEPLOY_ENABLED（"true"）
-# Environment "prod" の Variables: GCP_PROJECT_ID, GCP_REGION, TF_STATE_BUCKET, GCP_WORKLOAD_PROVIDER, GCP_SA_EMAIL
+# Repository variable:        DEPLOY_ENABLED ("true")
+# Environment "prod" variables: GCP_PROJECT_ID, GCP_REGION, TF_STATE_BUCKET, GCP_WORKLOAD_PROVIDER, GCP_SA_EMAIL
 
 on:
   push:
@@ -21,8 +21,8 @@ concurrency:
 
 jobs:
   deploy:
-    # デプロイ用の設定がされていないリポジトリ（fork した直後など）ではスキップする。
-    # ジョブの `if` では Environment の変数を参照できないため、リポジトリの Variable にする必要がある。
+    # Skip in repositories (e.g. fresh forks) that have not been set up for deployment.
+    # This must be a repository variable: environment variables are not available in a job-level `if`.
     if: vars.DEPLOY_ENABLED == 'true'
     environment: prod
     runs-on: ubuntu-latest

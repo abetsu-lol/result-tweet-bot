@@ -1,11 +1,11 @@
-// 特定のリポジトリ・ブランチの GitHub Actions に、デプロイ用サービスアカウントの借用を許可する
-// Workload Identity Federation
+// Workload Identity Federation that lets GitHub Actions runs of one repository/branch
+// impersonate a deployer service account
 
 data "google_project" "project" {
   project_id = var.project
 }
 
-// Workload Identity Federation に必要な API を有効化する
+// Enable required APIs for Workload Identity Federation
 resource "google_project_service" "iam" {
   project            = var.project
   service            = "iam.googleapis.com"
@@ -24,8 +24,8 @@ resource "google_project_service" "sts" {
   disable_on_destroy = false
 }
 
-// デプロイ用 SA で Terraform を実行するときに Terraform 自身が呼ぶ API。サービスアカウントによるリクエストは
-// その SA のプロジェクトに帰属するため、ここで有効化しておく必要がある（ユーザーの認証情報では不要）。
+// APIs that Terraform itself calls when the deployer runs it. Requests made with a service account
+// are attributed to its own project, so these must be enabled here (user credentials do not need them).
 resource "google_project_service" "cloudresourcemanager" {
   project            = var.project
   service            = "cloudresourcemanager.googleapis.com"
@@ -42,7 +42,7 @@ resource "google_iam_workload_identity_pool" "github" {
   project                   = var.project
   workload_identity_pool_id = "github-actions-pool"
   display_name              = "gha-wif-pool"
-  description               = "GitHub Actions の OIDC トークン用のプール"
+  description               = "Pool for GitHub Actions OIDC tokens"
 }
 
 resource "google_iam_workload_identity_pool_provider" "github" {
@@ -61,12 +61,12 @@ resource "google_iam_workload_identity_pool_provider" "github" {
     "attribute.ref"        = "assertion.ref"
   }
 
-  // このリポジトリのデプロイ用ブランチで発行されたトークンだけを受け付ける。
-  // fork や他のブランチ（Pull Request を含む）からは認証情報を取得できない。
+  // Only tokens issued for this repository's deploy branch are accepted, so forks and
+  // other branches (including pull requests) can never obtain credentials here.
   attribute_condition = "assertion.repository == '${var.github_repository}' && assertion.ref == 'refs/heads/${var.deploy_branch}'"
 }
 
-// GitHub Actions がデプロイのために借用するサービスアカウント
+// Service account that GitHub Actions impersonates to deploy
 resource "google_service_account" "deployer" {
   project      = var.project
   account_id   = "${var.name}-deployer"
@@ -81,7 +81,7 @@ resource "google_project_iam_member" "deployer_roles" {
   member  = "serviceAccount:${google_service_account.deployer.email}"
 }
 
-// リポジトリのワークフローにデプロイ用 SA の借用を許可する
+// Lets runs of the repository impersonate the deployer
 resource "google_service_account_iam_member" "github_actions" {
   service_account_id = google_service_account.deployer.name
   role               = "roles/iam.workloadIdentityUser"

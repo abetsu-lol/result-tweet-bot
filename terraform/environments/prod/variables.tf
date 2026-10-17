@@ -1,11 +1,11 @@
-// CI が GitHub の Environment の Variables から渡す（README 参照）
+// Supplied by CI from GitHub environment variables (see README)
 
 variable "project" {
-  description = "GCP プロジェクト ID"
+  description = "GCP project id"
   type        = string
 }
 
 variable "region" {
-  description = "GCP リージョン"
+  description = "GCP region"
   type        = string
 }
