@@ -9,6 +9,7 @@ terraform/
   environments/prod/  アプリのリソース（Cloud Function・Pub/Sub・Cloud Scheduler）。CI から apply
   modules/scheduled_function/  Cloud Function + Pub/Sub + Cloud Scheduler
   modules/github_actions_wif/  GitHub Actions 用 Workload Identity Federation とデプロイ用サービスアカウント
+  modules/function_build_iam/  関数のビルドに Cloud Build が使うサービスアカウント（Compute Engine のデフォルト SA）の権限
 scripts/          tfstate 用バケットの作成（bootstrap）・パッケージング用スクリプト
 .github/workflows/deploy.yml  main への push で terraform/environments/prod を apply
 ```
@@ -22,7 +23,7 @@ fork（または clone して自分のリポジトリに push）し、以下の�
 | | 内容 | apply する場所 | state（tfstate 用バケット内の prefix） |
 | --- | --- | --- | --- |
 | tfstate 用バケット | `scripts/bootstrap.sh`（gcloud） | ローカル | — |
-| `terraform/bootstrap/prod` | WIF プール / プロバイダ、デプロイ用サービスアカウントとその権限 | ローカル（初回とまれな変更のみ） | `terraform/bootstrap` |
+| `terraform/bootstrap/prod` | WIF プール / プロバイダ、デプロイ用サービスアカウントとその権限、関数のビルドに使うサービスアカウントの権限 | ローカル（初回とまれな変更のみ） | `terraform/bootstrap` |
 | `terraform/environments/prod` | Cloud Function・Pub/Sub・Cloud Scheduler | CI | `terraform/state` |
 
 CI の認証情報と IAM は CI の管理対象外にしているため、デプロイ用サービスアカウントにはプロジェクトの IAM を変更する権限がありません。

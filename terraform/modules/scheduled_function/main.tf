@@ -20,6 +20,19 @@ resource "google_project_service" "storage" {
   service = "storage.googleapis.com"
 }
 
+// Cloud Functions builds each deployment with Cloud Build and stores the image in Artifact Registry
+resource "google_project_service" "cloudbuild" {
+  project            = var.project
+  service            = "cloudbuild.googleapis.com"
+  disable_on_destroy = false
+}
+
+resource "google_project_service" "artifactregistry" {
+  project            = var.project
+  service            = "artifactregistry.googleapis.com"
+  disable_on_destroy = false
+}
+
 resource "google_storage_bucket" "source" {
   project                     = var.project
   name                        = "${var.name}-src-${var.project}"
@@ -79,6 +92,8 @@ resource "google_cloudfunctions_function" "this" {
   }
   depends_on = [
     google_project_service.cloudfunctions,
+    google_project_service.cloudbuild,
+    google_project_service.artifactregistry,
     google_project_service.storage,
     google_storage_bucket.source,
     google_storage_bucket_object.source,
