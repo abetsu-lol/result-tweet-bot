@@ -1,4 +1,16 @@
+# Python
 __pycache__/
 *.pyc
-*.zip
 .env
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+backend.hcl
+crash.log
+
+# Build output
+build/

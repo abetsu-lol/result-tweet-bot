@@ -1,0 +1,4 @@
+# Example terraform.tfvars for bootstrap
+project = "your-gcp-project-id"
+backend_bucket = "terraform-state-your-gcp-project-id"
+region = "asia-northeast1"

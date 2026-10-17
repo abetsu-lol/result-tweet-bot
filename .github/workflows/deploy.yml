@@ -1,0 +1,60 @@
+name: Deploy
+
+# Deploys to whichever GCP project the repository running this workflow is configured for.
+# Forks: set the variables/secrets below in your own repository (see README) to deploy to your own project.
+#
+# Repository variables: DEPLOY_ENABLED ("true"), GCP_PROJECT_ID, GCP_REGION, TF_STATE_BUCKET
+# Repository secrets:   GCP_WORKLOAD_PROVIDER, GCP_SA_EMAIL
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    # Skip in repositories (e.g. fresh forks) that have not been set up for deployment
+    if: vars.DEPLOY_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Authenticate to GCP using Workload Identity
+      uses: google-github-actions/auth@v2
+      with:
+        workload_identity_provider: ${{ secrets.GCP_WORKLOAD_PROVIDER }}
+        service_account: ${{ secrets.GCP_SA_EMAIL }}
+
+    - name: Package Cloud Function
+      run: ./scripts/package_function.sh
+
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v3
+
+    - name: Terraform Init
+      working-directory: terraform
+      run: |
+        terraform init -input=false \
+          -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}" \
+          -backend-config="prefix=terraform/state"
+
+    - name: Terraform Apply
+      working-directory: terraform
+      run: |
+        terraform apply -auto-approve -input=false \
+          -var="project=${{ vars.GCP_PROJECT_ID }}" \
+          -var="region=${{ vars.GCP_REGION }}" \
+          -var="github_repository=${{ github.repository }}"
