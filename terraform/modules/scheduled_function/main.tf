@@ -20,6 +20,50 @@ resource "google_project_service" "storage" {
   service = "storage.googleapis.com"
 }
 
+// Cloud Functions builds each deployment with Cloud Build and stores the image in Artifact Registry
+resource "google_project_service" "cloudbuild" {
+  project            = var.project
+  service            = "cloudbuild.googleapis.com"
+  disable_on_destroy = false
+}
+
+resource "google_project_service" "artifactregistry" {
+  project            = var.project
+  service            = "artifactregistry.googleapis.com"
+  disable_on_destroy = false
+}
+
+// Images built for the function. Using our own repository (instead of the auto-created gcf-artifacts)
+// lets old images be cleaned up; each image is ~450MB, mostly the runtime base image.
+resource "google_artifact_registry_repository" "images" {
+  project       = var.project
+  location      = var.region
+  repository_id = "${var.name}-images"
+  format        = "DOCKER"
+  description   = "Images built for the ${var.name} Cloud Function"
+
+  cleanup_policy_dry_run = false
+
+  // KEEP takes precedence over DELETE: only the most recent versions survive
+  cleanup_policies {
+    id     = "keep-recent"
+    action = "KEEP"
+    most_recent_versions {
+      keep_count = var.image_keep_count
+    }
+  }
+
+  cleanup_policies {
+    id     = "delete-others"
+    action = "DELETE"
+    condition {
+      tag_state = "ANY"
+    }
+  }
+
+  depends_on = [google_project_service.artifactregistry]
+}
+
 resource "google_storage_bucket" "source" {
   project                     = var.project
   name                        = "${var.name}-src-${var.project}"
@@ -70,6 +114,9 @@ resource "google_cloudfunctions_function" "this" {
   runtime     = var.runtime
   entry_point = var.entry_point
 
+  docker_registry   = "ARTIFACT_REGISTRY"
+  docker_repository = google_artifact_registry_repository.images.id
+
   source_archive_bucket = google_storage_bucket.source.name
   source_archive_object = google_storage_bucket_object.source.name
 
@@ -79,6 +126,8 @@ resource "google_cloudfunctions_function" "this" {
   }
   depends_on = [
     google_project_service.cloudfunctions,
+    google_project_service.cloudbuild,
+    google_project_service.artifactregistry,
     google_project_service.storage,
     google_storage_bucket.source,
     google_storage_bucket_object.source,

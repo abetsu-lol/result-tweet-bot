@@ -31,3 +31,10 @@ module "github_actions_wif" {
     "roles/pubsub.admin",
   ]
 }
+
+// Project IAM needed to build the function; CI cannot grant it because the deployer has no IAM rights
+module "function_build_iam" {
+  source = "../../modules/function_build_iam"
+
+  project = var.project
+}
