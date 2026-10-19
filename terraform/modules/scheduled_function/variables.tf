@@ -52,3 +52,27 @@ variable "time_zone" {
   type        = string
   default     = "Asia/Tokyo"
 }
+
+variable "service_account_email" {
+  description = "Service account the function runs as; null uses the App Engine default service account"
+  type        = string
+  default     = null
+}
+
+variable "memory_mb" {
+  description = "Memory available to the function in MB"
+  type        = number
+  default     = 256
+}
+
+variable "timeout_seconds" {
+  description = "Maximum execution time of one invocation in seconds (at most 540 for 1st gen)"
+  type        = number
+  default     = 60
+}
+
+variable "environment_variables" {
+  description = "Environment variables of the function. Secrets go to Secret Manager and are read at runtime, not here"
+  type        = map(string)
+  default     = {}
+}

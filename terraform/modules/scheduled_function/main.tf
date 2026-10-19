@@ -114,6 +114,11 @@ resource "google_cloudfunctions_function" "this" {
   runtime     = var.runtime
   entry_point = var.entry_point
 
+  service_account_email = var.service_account_email
+  available_memory_mb   = var.memory_mb
+  timeout               = var.timeout_seconds
+  environment_variables = var.environment_variables
+
   docker_registry   = "ARTIFACT_REGISTRY"
   docker_repository = google_artifact_registry_repository.images.id
 
