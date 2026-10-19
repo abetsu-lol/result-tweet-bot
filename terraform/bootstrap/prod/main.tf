@@ -38,3 +38,12 @@ module "function_build_iam" {
 
   project = var.project
 }
+
+// Runtime service account, secrets and data bucket of the function (IAM is involved, so not in CI)
+module "function_runtime" {
+  source = "../../modules/function_runtime"
+
+  project                        = var.project
+  name                           = "result-tweet-bot"
+  deployer_service_account_email = module.github_actions_wif.deployer_service_account_email
+}
