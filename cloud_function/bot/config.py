@@ -81,6 +81,18 @@ class Account:
     x: XAccount
 
 
+def parse_x_app_credentials(raw):
+    """Parses X_APP_CREDENTIALS ({"consumer_key", "consumer_secret"}) without echoing values."""
+    try:
+        creds = json.loads(raw)
+    except ValueError:
+        raise ConfigError("x-app-credentials is not valid JSON") from None
+    for key in ("consumer_key", "consumer_secret"):
+        if not isinstance(creds, dict) or not isinstance(creds.get(key), str) or not creds[key].strip():
+            raise ConfigError(f"x-app-credentials.{key} is missing")
+    return {"consumer_key": creds["consumer_key"].strip(), "consumer_secret": creds["consumer_secret"].strip()}
+
+
 def parse_accounts(raw):
     """Parses the ACCOUNTS JSON. Errors name the offending item, never its value."""
     try:

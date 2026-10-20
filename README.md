@@ -149,9 +149,13 @@ Riot の Development キーは 24 時間で失効するため、開発中は毎�
 | ファイル | 役割 |
 | --- | --- |
 | `main.py` | エントリポイント `daily_job(event, context)` |
-| `bot/app.py` | 1 回の実行。アカウントごとに収集し、1 つの失敗で他を止めない |
+| `bot/app.py` | 1 回の実行。アカウントごとに収集 → 投稿し、1 つの失敗で他を止めない |
 | `bot/collect.py` | 前回の続きから、終了時刻が 12:00〜12:00（JST）に入るソロ / デュオ（queue 420）の試合を取得し、元データと指標を保存する（15 分未満の試合は除外） |
 | `bot/metrics.py` | 試合ごとの指標。`@metric("名前")` を付けた関数を追加すると、以後の試合に保存される |
+| `bot/publish.py` | 投稿するか（`POST_SCHEDULE`）と対象期間を決め、保存済みの指標から投稿を組み立てて固定ポストのリプライツリーに投稿する。`DRY_RUN` では投稿せず `previews/` に保存 |
+| `bot/render.py` / `bot/aggregate.py` / `bot/text.py` | 表の画像（試合ごと / チャンピオン別）、本文、X の文字数の数え方（日本語は 2） |
+| `bot/ddragon.py` | チャンピオンの日本語名とアイコン（Data Dragon） |
+| `bot/x.py` | X API（OAuth 1.0a、画像のアップロード、リプライ）。投稿は再試行しない |
 | `bot/period.py` | 日の区切り（12:00 JST。日付は区切りの開始日） |
 | `bot/riot.py` / `bot/gcp.py` / `bot/http.py` | Riot API、Secret Manager / GCS（REST）、HTTP の共通処理（User-Agent、429 / 5xx の再試行） |
 | `bot/config.py` | 環境変数と `ACCOUNTS` の読み込み・検証 |
@@ -162,7 +166,19 @@ Riot の Development キーは 24 時間で失効するため、開発中は毎�
 | --- | --- |
 | `raw/matches/<match id>.json.gz` | 試合の詳細とタイムライン（gzip）。試合ごとに 1 回だけ書き込む |
 | `metrics/<account id>/<日付>.ndjson` | その日の試合の指標（1 行 1 試合） |
-| `state/<account id>.json` | PUUID のキャッシュ、収集・投稿の進み具合 |
+| `state/<account id>.json` | PUUID のキャッシュ、収集・投稿の進み具合（`last_collected_end` / `last_post_end` / `last_post_id`） |
+| `previews/<account id>/<日付>/` | `DRY_RUN` のときに作った投稿の本文と画像 |
+
+投稿の設定（`terraform/environments/prod/main.tf` の関数の環境変数）:
+
+| 環境変数 | 値 | 内容 |
+| --- | --- | --- |
+| `POST_SCHEDULE` | `daily` / `weekly:MON`〜`weekly:SUN` | 毎日投稿するか、指定した曜日（JST）だけ投稿するか。対象期間は前回の投稿の区切りから今回の区切りまで（最長 7 日）なので、切り替えても試合が抜けたり重複したりしない |
+| `POST_FORMAT` | `image` / `text` | 表の画像付きか、テキストのみ。画像は必ず 1 投稿（4 枚まで）に収める（1 枚 8 行を基本に、足りなければ 1 枚 25 行まで増やす。100 試合を超えたら直近 100 試合を載せる）。テキストは 280 文字を超えると複数のリプライに分ける |
+| `POST_LAYOUT` | `per_game` / `summary` | 試合ごとの一覧か、チャンピオン別の集計か |
+| `DRY_RUN` | `true` / `false` | `false` 以外では投稿しない |
+
+画像の日本語フォントは Noto Sans JP（SIL Open Font License 1.1、`cloud_function/bot/assets/OFL.txt`）を、使う文字だけに絞って同梱しています。新しいチャンピオンが追加されたら `.venv/Scripts/python scripts/build_font.py` で作り直します（日本語名にフォントにない文字があると、その文字が表示されないため）。
 
 ## テスト
 

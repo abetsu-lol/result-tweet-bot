@@ -1,2 +1,4 @@
 requests==2.34.2
 google-auth==2.62.0
+requests-oauthlib==2.0.0
+Pillow==13.0.0

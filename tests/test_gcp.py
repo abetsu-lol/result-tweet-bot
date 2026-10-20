@@ -98,3 +98,9 @@ def test_write_errors_raise_even_when_only_if_absent():
         gcp.Bucket(Session(Response(500, text="err")), "b").write_gzip_json_once("a", {})
     with pytest.raises(HttpError):
         gcp.Bucket(Session(Response(403)), "b").write_json("a", {})
+
+
+def test_write_bytes_keeps_content_type():
+    session = Session(Response(200))
+    gcp.Bucket(session, "b").write_bytes("previews/a.png", b"\x89PNG", "image/png")
+    assert session.calls[0][2]["headers"] == {"Content-Type": "image/png"} and session.calls[0][2]["data"] == b"\x89PNG"

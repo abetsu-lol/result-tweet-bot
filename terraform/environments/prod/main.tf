@@ -52,8 +52,8 @@ module "scheduled_function" {
     POST_SCHEDULE = "daily"
     POST_FORMAT   = "image"
     POST_LAYOUT   = "per_game"
-    // Keep true until going live: collect and store, but do not post
-    DRY_RUN = "true"
+    // "true" collects and stores but writes the would-be posts to previews/ instead of posting
+    DRY_RUN = "false"
   }
 }
 

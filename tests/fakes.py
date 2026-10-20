@@ -47,9 +47,49 @@ class FakeBucket:
         self.writes.append(path)
         self.objects[path] = copy.deepcopy(records)
 
+    def write_bytes(self, path, data, content_type):
+        self.writes.append(path)
+        self.objects[path] = data
+
     def write_gzip_json_once(self, path, obj):
         if path in self.objects:
             return False
         self.writes.append(path)
         self.objects[path] = copy.deepcopy(obj)
         return True
+
+
+class FakeChampions:
+    """Data Dragon stand-in: Japanese names from a small table, a tiny icon for known ones."""
+    NAMES = {"Ahri": "アーリ", "Zed": "ゼド", "Garen": "ガレン"}
+
+    def __init__(self):
+        from io import BytesIO
+        from PIL import Image
+        out = BytesIO()
+        Image.new("RGB", (8, 8), (200, 100, 50)).save(out, format="PNG")
+        self.icon_png = out.getvalue()
+
+    def name(self, champion):
+        return self.NAMES.get(champion, champion or "-")
+
+    def icon(self, champion):
+        return self.icon_png if champion in self.NAMES else None
+
+
+class FakeX:
+    """Records uploads and posts; post ids are sequential strings."""
+
+    def __init__(self, fail_on_post=None):
+        self.uploads, self.posts = [], []
+        self.fail_on_post = fail_on_post
+
+    def upload_png(self, data):
+        self.uploads.append(data)
+        return f"media-{len(self.uploads)}"
+
+    def post(self, text, *, reply_to, media_ids=()):
+        if self.fail_on_post is not None and len(self.posts) == self.fail_on_post:
+            raise RuntimeError("X failed")
+        self.posts.append({"text": text, "reply_to": reply_to, "media_ids": list(media_ids)})
+        return f"post-{len(self.posts)}"
