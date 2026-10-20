@@ -74,6 +74,9 @@ class Bucket:
         text = self._get(path)
         return [] if text is None else [json.loads(line) for line in text.splitlines() if line.strip()]
 
+    def write_bytes(self, path, data, content_type):
+        self._upload(path, data, content_type)
+
     def write_json(self, path, obj):
         self._upload(path, json.dumps(obj, ensure_ascii=False).encode("utf-8"), "application/json")
 

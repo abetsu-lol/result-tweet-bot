@@ -79,3 +79,13 @@ def test_explicit_region_wins_and_tag_hash_is_stripped():
     [parsed] = config.parse_accounts(json.dumps([account(
         riot={"game_name": "a", "tag_line": "#JP1", "platform": "jp1", "region": "sea"})]))
     assert (parsed.riot.region, parsed.riot.tag_line) == ("sea", "JP1")
+
+
+def test_x_app_credentials_parse_and_errors_hide_values():
+    assert config.parse_x_app_credentials('{"consumer_key": " k ", "consumer_secret": "s"}') == \
+        {"consumer_key": "k", "consumer_secret": "s"}
+    with pytest.raises(config.ConfigError, match="consumer_secret is missing"):
+        config.parse_x_app_credentials('{"consumer_key": "topsecret"}')
+    with pytest.raises(config.ConfigError, match="not valid JSON") as error:
+        config.parse_x_app_credentials("topsecret")
+    assert "topsecret" not in str(error.value)
