@@ -142,9 +142,38 @@ Riot の Development キーは 24 時間で失効するため、開発中は毎�
 - デプロイ用サービスアカウントのロールは `roles/editor` と `roles/pubsub.admin`（Cloud Scheduler が topic に publish するための権限付与に必要）のみです。プロジェクトの IAM や WIF は変更できません。
 - Secret Manager の Secret に対して、デプロイ用サービスアカウントはバージョンの追加・破棄のみ、関数の実行用サービスアカウントは読み取りのみ可能です。
 
-## ローカルでの動作確認
+## アプリの構成
+
+`cloud_function/` が関数のソースです（`scripts/package_function.sh` で zip にしてデプロイされる）。
+
+| ファイル | 役割 |
+| --- | --- |
+| `main.py` | エントリポイント `daily_job(event, context)` |
+| `bot/app.py` | 1 回の実行。アカウントごとに収集し、1 つの失敗で他を止めない |
+| `bot/collect.py` | 前回の続きから、終了時刻が 12:00〜12:00（JST）に入るソロ / デュオ（queue 420）の試合を取得し、元データと指標を保存する（15 分未満の試合は除外） |
+| `bot/metrics.py` | 試合ごとの指標。`@metric("名前")` を付けた関数を追加すると、以後の試合に保存される |
+| `bot/period.py` | 日の区切り（12:00 JST。日付は区切りの開始日） |
+| `bot/riot.py` / `bot/gcp.py` / `bot/http.py` | Riot API、Secret Manager / GCS（REST）、HTTP の共通処理（User-Agent、429 / 5xx の再試行） |
+| `bot/config.py` | 環境変数と `ACCOUNTS` の読み込み・検証 |
+
+戦績データ用バケットの中身:
+
+| パス | 内容 |
+| --- | --- |
+| `raw/matches/<match id>.json.gz` | 試合の詳細とタイムライン（gzip）。試合ごとに 1 回だけ書き込む |
+| `metrics/<account id>/<日付>.ndjson` | その日の試合の指標（1 行 1 試合） |
+| `state/<account id>.json` | PUUID のキャッシュ、収集・投稿の進み具合 |
+
+## テスト
 
 ```bash
-cd cloud_function
-python -c "import main; print(main.daily_job({}, None))"
+python -m venv .venv
+.venv/Scripts/python -m pip install -r requirements-dev.txt   # macOS / Linux: .venv/bin/python
+.venv/Scripts/python -m pytest
+.venv/Scripts/python -m coverage run --branch --source=cloud_function -m pytest && .venv/Scripts/python -m coverage report -m
+.venv/Scripts/python -m pip_audit -r cloud_function/requirements.txt   # 依存ライブラリの既知の脆弱性
 ```
+
+Riot API・GCS・Secret Manager は偽物に差し替えて実行します（通信しない）。
+
+依存ライブラリは `==` で固定し（デプロイのたびに中身が変わらないようにするため）、固定した時点の最新版を選んでいます。以後の更新は Dependabot の PR で行います。

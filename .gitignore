@@ -16,3 +16,8 @@ build/
 
 # Filled-in secret files (keep them outside the repository; see secrets.example/)
 /secrets/
+
+# Local virtualenv for tests
+.venv/
+.pytest_cache/
+.coverage
