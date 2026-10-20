@@ -46,3 +46,13 @@ def test_one_failing_account_does_not_stop_the_others(wired, monkeypatch, capsys
 def test_successful_run_returns_ok(wired, monkeypatch):
     monkeypatch.setattr(app.collect, "collect", lambda acc, *a: collect.CollectResult(acc.id, "s", "e"))
     assert app.run(env=ENV, session=object(), riot=object()) == "ok"
+
+
+def test_unreadable_secrets_fail_the_whole_run(monkeypatch):
+    class Broken:
+        def latest(self, name):
+            raise RuntimeError("permission denied")
+    monkeypatch.setattr(app.gcp, "SecretStore", lambda session: Broken())
+    monkeypatch.setattr(app.gcp, "Bucket", lambda session, name: object())
+    with pytest.raises(RuntimeError, match="permission denied"):
+        app.run(env=ENV, session=object(), riot=object())

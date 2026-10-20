@@ -170,6 +170,10 @@ Riot の Development キーは 24 時間で失効するため、開発中は毎�
 python -m venv .venv
 .venv/Scripts/python -m pip install -r requirements-dev.txt   # macOS / Linux: .venv/bin/python
 .venv/Scripts/python -m pytest
+.venv/Scripts/python -m coverage run --branch --source=cloud_function -m pytest && .venv/Scripts/python -m coverage report -m
+.venv/Scripts/python -m pip_audit -r cloud_function/requirements.txt   # 依存ライブラリの既知の脆弱性
 ```
 
 Riot API・GCS・Secret Manager は偽物に差し替えて実行します（通信しない）。
+
+依存ライブラリは `==` で固定し（デプロイのたびに中身が変わらないようにするため）、固定した時点の最新版を選んでいます。以後の更新は Dependabot の PR で行います。

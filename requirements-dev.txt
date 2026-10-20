@@ -1,2 +1,4 @@
 -r cloud_function/requirements.txt
-pytest==8.3.4
+pytest==9.1.1
+coverage==7.16.2
+pip-audit==2.10.1

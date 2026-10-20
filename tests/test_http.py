@@ -43,3 +43,11 @@ def test_client_errors_are_not_retried():
 
 def test_new_session_sets_user_agent():
     assert http.new_session().headers["User-Agent"].startswith("result-tweet-bot/")
+
+
+def test_non_numeric_retry_after_falls_back_to_backoff_and_waits_are_capped():
+    waits = []
+    session = Session(Response(429, {"Retry-After": "Wed, 21 Oct 2026 07:28:00 GMT"}),
+                      Response(429, {"Retry-After": "600"}), Response(200))
+    http.request(session, "GET", "https://x/y", max_wait=60, sleep=waits.append)
+    assert waits == [1, 60]

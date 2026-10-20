@@ -20,3 +20,4 @@ build/
 # Local virtualenv for tests
 .venv/
 .pytest_cache/
+.coverage

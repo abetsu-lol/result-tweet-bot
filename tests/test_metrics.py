@@ -48,3 +48,24 @@ def test_unknown_position_leaves_lane_metrics_empty():
     assert result["opponent_champion"] is None
     assert result["gold_diff_15"] is None
     assert result["cs_diff_15"] is None
+
+
+def test_missing_lane_opponent_leaves_lane_metrics_empty():
+    match = f.match()
+    for p in match["info"]["participants"]:
+        if p["teamId"] == 200 and p["teamPosition"] == "MIDDLE":
+            p["teamPosition"] = ""  # e.g. a role swap Riot could not resolve
+    result = metrics.compute(context(match=match))
+    assert result["opponent_champion"] is None and result["gold_diff_15"] is None
+    assert result["champion"] == "Ahri"  # other metrics still work
+
+
+def test_timeline_without_a_15_minute_frame_leaves_snapshot_metrics_empty():
+    ctx = context(timeline=f.timeline(minutes=14))
+    assert ctx.snapshot is None
+    assert metrics.gold_diff_15(ctx) is None and metrics.cs_diff_15(ctx) is None
+
+
+def test_kills_by_turrets_or_minions_are_not_counted_as_mine():
+    ctx = context(timeline=f.timeline(events=[f.kill(5 * 60_000, killer=0, victim=8, assists=[3])]))
+    assert metrics.kda_15(ctx) == {"kills": 0, "deaths": 0, "assists": 1}

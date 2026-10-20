@@ -102,3 +102,50 @@ def test_failure_leaves_state_untouched():
     except KeyError:
         pass
     assert bucket.objects["state/main.json"]["last_collected_end"] == datetime(2026, 10, 19, 12, tzinfo=JST).isoformat()
+
+
+def test_window_spanning_several_days_writes_one_file_per_day():
+    riot = riot_with({
+        "JP1_a": (datetime(2026, 10, 18, 20, 0, tzinfo=JST), 1800),  # day 10/18
+        "JP1_b": (datetime(2026, 10, 19, 20, 0, tzinfo=JST), 1800),  # day 10/19
+    })
+    bucket = FakeBucket()
+    bucket.objects["state/main.json"] = {"last_collected_end": datetime(2026, 10, 18, 12, tzinfo=JST).isoformat()}
+
+    result = collect.collect(ACCOUNT, riot, bucket, NOW)
+
+    assert result.days == ["2026-10-18", "2026-10-19"]
+    assert [r["match_id"] for r in bucket.objects["metrics/main/2026-10-18.ndjson"]] == ["JP1_a"]
+    assert [r["match_id"] for r in bucket.objects["metrics/main/2026-10-19.ndjson"]] == ["JP1_b"]
+
+
+def test_empty_window_calls_no_match_api():
+    riot = riot_with({})
+    bucket = FakeBucket()
+    end = datetime(2026, 10, 20, 12, tzinfo=JST)
+    bucket.objects["state/main.json"] = {"last_collected_end": end.isoformat(), "puuid": "puuid-me",
+                                         "riot_id": "名前#JP1", "last_post_id": "9"}
+
+    result = collect.collect(ACCOUNT, riot, bucket, datetime(2026, 10, 20, 18, 0, tzinfo=JST))
+
+    assert result.collected == 0 and result.days == []
+    assert riot.calls == []  # neither puuid nor match lookups
+    assert bucket.objects["state/main.json"]["last_post_id"] == "9"  # other state is kept
+
+
+def test_game_ending_exactly_at_a_boundary_belongs_to_the_new_day():
+    start = datetime(2026, 10, 19, 12, tzinfo=JST)
+    end = datetime(2026, 10, 20, 12, tzinfo=JST)
+    riot = riot_with({"JP1_at_start": (start, 1800), "JP1_at_end": (end, 1800)})
+    bucket = FakeBucket()
+    bucket.objects["state/main.json"] = {"last_collected_end": start.isoformat()}
+
+    collect.collect(ACCOUNT, riot, bucket, NOW)
+
+    assert [r["match_id"] for r in bucket.objects["metrics/main/2026-10-19.ndjson"]] == ["JP1_at_start"]
+
+
+def test_end_time_falls_back_to_start_plus_duration_for_old_matches():
+    match = f.match(end=datetime(2026, 10, 19, 20, 0, tzinfo=JST), duration=1800)
+    del match["info"]["gameEndTimestamp"]
+    assert collect.game_end(match["info"]) == datetime(2026, 10, 19, 20, 0, tzinfo=JST)
