@@ -15,6 +15,7 @@ from . import aggregate, period, render, text
 from .collect import metrics_path, state_path
 
 IMAGES_PER_POST = 4  # X's limit for photos on one post
+MAX_IMAGE_ROWS = IMAGES_PER_POST * render.MAX_ROWS_PER_IMAGE  # rows one post can show
 MAX_SPAN = timedelta(days=7)  # a post never covers more than this, however long ago the last one was
 WEEKDAYS = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"]
 
@@ -60,8 +61,9 @@ def load_records(bucket, account_id, start, end):
 def paginate(rows):
     """Splits rows over at most IMAGES_PER_POST images, as evenly as possible.
 
-    ROWS_PER_IMAGE rows per image while that is enough; beyond that images get taller,
-    so a period's results always fit on a single post.
+    ROWS_PER_IMAGE rows per image while that is enough; beyond that images get taller (up to
+    MAX_ROWS_PER_IMAGE), so a period's results fit on a single post. Callers keep rows within
+    MAX_IMAGE_ROWS.
     """
     count = min(IMAGES_PER_POST, -(-len(rows) // render.ROWS_PER_IMAGE))
     size = -(-len(rows) // count)
@@ -82,6 +84,9 @@ def build_posts(settings, records, champions, label):
         return [Post(t) for t in text.split_into_posts(summary, lines)]
 
     draw = render.champions_image if settings.post_layout == "summary" else render.games_image
+    if len(rows) > MAX_IMAGE_ROWS:  # only the newest fit on one post; the summary still counts every game
+        rows = rows[-MAX_IMAGE_ROWS:]
+        summary += f"\n（画像は直近{MAX_IMAGE_ROWS}試合）"
     pages = paginate(rows)
     images = [draw(f"{label} ソロランク" + (f"（{n}/{len(pages)}）" if len(pages) > 1 else ""), page, champions)
               for n, page in enumerate(pages, start=1)]

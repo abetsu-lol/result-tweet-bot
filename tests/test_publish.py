@@ -163,3 +163,14 @@ def test_text_format_lists_each_game():
     bucket = bucket_with([game("JP1_1", datetime(2026, 10, 19, 20, tzinfo=JST))])
     _, x = run(bucket, DRY_RUN="false", POST_FORMAT="text")
     assert x.posts[0]["text"].splitlines()[-1] == "勝 アーリ vs ゼド 1/0/1 GD+100 CS+5 KP50%"
+
+
+def test_more_games_than_one_post_can_show_keeps_the_newest_and_says_so():
+    start = datetime(2026, 10, 13, 12, 30, tzinfo=JST)
+    games = [game(f"JP1_{i:03d}", start + timedelta(hours=1.5 * i), win=i > 0) for i in range(101)]
+    records = publish.load_records(bucket_with(games), "main", END - timedelta(days=7), END)
+    [post] = publish.build_posts(settings(), records, FakeChampions(), "10/13〜10/19")
+    assert len(post.images) == 4
+    assert all(len(page) <= 25 for page in publish.paginate(records[-publish.MAX_IMAGE_ROWS:]))
+    assert post.text.startswith("10/13〜10/19 ソロランク 100勝1敗")  # the text still counts every game
+    assert post.text.endswith("（画像は直近100試合）")
