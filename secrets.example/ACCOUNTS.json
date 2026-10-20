@@ -1,0 +1,15 @@
+[
+  {
+    "id": "main",
+    "riot": {
+      "game_name": "<Riot ID before #>",
+      "tag_line": "<Riot ID after # (without #)>",
+      "platform": "jp1"
+    },
+    "x": {
+      "access_token": "<Access Token of the posting account>",
+      "access_token_secret": "<Access Token Secret of the posting account>",
+      "root_post_id": "<id of the pinned post the daily replies hang from (digits at the end of its URL)>"
+    }
+  }
+]

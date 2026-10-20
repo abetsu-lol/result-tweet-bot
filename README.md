@@ -33,7 +33,7 @@ CI の認証情報と IAM は CI の管理対象外にしているため、デ�
 
 デプロイに必要な値はすべて GitHub リポジトリの設定（Settings → Secrets and variables → Actions / Settings → Environments）に置きます。
 リポジトリ内に環境ごとの設定ファイル（tfvars など）はありません。
-いずれも機密情報ではないため Variables に置いています（公開リポジトリでは Actions のログに値が表示されます）。
+機密ではない値は Variables（公開リポジトリでは Actions のログに値が表示されます）、API キーなどは Secrets に置きます。
 
 Environment `prod` を作成し、Deployment branches を `main` のみに制限したうえで、以下を設定します。
 
@@ -45,18 +45,22 @@ Environment `prod` を作成し、Deployment branches を `main` のみに制限
 | Environment `prod` の Variable | `TF_STATE_BUCKET` | tfstate 用バケット名 | `scripts/bootstrap.sh` の出力 |
 | Environment `prod` の Variable | `GCP_WORKLOAD_PROVIDER` | WIF プロバイダのフルリソース名 | `terraform/bootstrap/prod` の `terraform output -raw wif_provider` |
 | Environment `prod` の Variable | `GCP_SA_EMAIL` | デプロイ用サービスアカウントのメールアドレス | `terraform/bootstrap/prod` の `terraform output -raw deployer_service_account_email` |
+| Environment `prod` の Secret | `RIOT_API_KEY` | Riot Games の API キー | [Secret の登録と更新](#secret-の登録と更新) |
+| Environment `prod` の Secret | `X_APP_CREDENTIALS` | X アプリの Consumer Key / Secret（JSON） | 同上 |
+| Environment `prod` の Secret | `ACCOUNTS` | 対象の Riot アカウントと X アカウントのセットの配列（JSON） | 同上 |
 
 Terraform の変数との対応:
 
 | Terraform 変数 | 値の出どころ |
 | --- | --- |
 | `environments/prod`: `project` / `region` | `GCP_PROJECT_ID` / `GCP_REGION` |
+| `environments/prod`: `riot_api_key` / `x_app_credentials` / `accounts` | Secrets（`TF_VAR_*`）。書き込み専用で Secret Manager に書き込まれ、plan と state には残らない |
 | `bootstrap/prod`: `project` / `github_repository` | ローカルでの apply 時に `-var` で指定 |
 | リソース名（`name`）・スケジュール・デプロイ用ブランチ・デプロイ用サービスアカウントのロールほか | 各ルートの `main.tf` のモジュール引数。変える場合は編集する |
 
 ## 自分の環境にデプロイする
 
-前提: GCP プロジェクト（課金有効）、`gcloud`、Terraform >= 1.7、GitHub リポジトリ、bash（Windows では Git Bash）。
+前提: GCP プロジェクト（課金有効）、`gcloud`、`gh`、Terraform >= 1.11、GitHub リポジトリ、bash（Windows では Git Bash）。
 ローカルでの作業はプロジェクトのオーナー権限で行います。
 
 ### 1. tfstate 用バケットを作成（ローカル・初回のみ）
@@ -88,7 +92,7 @@ terraform output -raw deployer_service_account_email; echo
 
 ### 3. GitHub リポジトリの設定
 
-[設定項目](#設定項目) の Environment と Variables をすべて設定します。
+[設定項目](#設定項目) の Environment と Variables をすべて設定し、[Secret の登録と更新](#secret-の登録と更新) の手順で Secrets を登録します。
 fork の場合は Actions タブからワークフローを有効にしてください（fork では既定で無効）。
 
 ### 4. 以降
@@ -98,11 +102,45 @@ fork の場合は Actions タブからワークフローを有効にしてくだ
 ソースが変わると GCS 上のオブジェクト名（内容ハッシュ）が変わり、関数が再デプロイされます。
 `environments/prod` の変更も同様に push で反映し、ローカルからの plan / apply は行いません。
 
+## Secret の登録と更新
+
+API キーなどは GitHub の Environment `prod` の Secrets を正とし、デプロイ時に Terraform が Secret Manager へ書き込みます（`modules/secret_versions`）。
+値は書き込み専用の引数で渡すため、plan と state には残りません。
+Terraform は値の変化を比べられないので、**値を変えたら `terraform/environments/prod/main.tf` の `module "secret_versions"` の番号を上げて** マージします。番号が変わった Secret だけ、新しいバージョンが書き込まれます。
+
+1. テンプレートをリポジトリの外にコピーして記入する（認証情報を含むため、リポジトリの中には置かない）
+
+   ```bash
+   cp -r secrets.example ~/result-tweet-bot-secrets
+   ```
+
+   | ファイル | 内容 |
+   | --- | --- |
+   | `RIOT_API_KEY.txt` | Riot の API キー（`RGAPI-` で始まる） |
+   | `X_APP_CREDENTIALS.json` | X アプリの Consumer Key（画面の表示は API Key）と Consumer Secret（API Key Secret） |
+   | `ACCOUNTS.json` | 対象アカウントのセットの配列。`id` は保存先のパスに使うため一度決めたら変えない。`riot.platform` は `jp1` など。`x.access_token` / `x.access_token_secret` は投稿するアカウントのもの（アプリの権限を Read and write にしてから発行する）。`x.root_post_id` はリプライをつなげる固定ポストの ID（文字列） |
+
+2. 検証して登録する（値は表示されない）
+
+   ```bash
+   ./scripts/set_secrets.sh --check   # 検証のみ
+   ./scripts/set_secrets.sh           # 3 つとも登録（1 つだけなら名前を指定）
+   ```
+
+3. `module "secret_versions"` の番号を上げる PR を出してマージする（初回は 1 のままでよい）
+
+Riot の Development キーは 24 時間で失効するため、開発中は毎日次を実行して更新します。GitHub Secret と同時に Secret Manager にも直接書き込むので、PR は不要です（関数は常に最新のバージョンを読む）。
+
+```bash
+./scripts/set_secrets.sh --direct RIOT_API_KEY
+```
+
 ## セキュリティ
 
 - Workload Identity Federation で、`github_repository` の `deploy_branch`（既定 `main`）で動くワークフローだけが認証できます。fork や Pull Request からは認証できません。
 - ワークフローは `pull_request` では実行せず、Environment `prod` は `main` ブランチからのみ使用できます。
 - デプロイ用サービスアカウントのロールは `roles/editor` と `roles/pubsub.admin`（Cloud Scheduler が topic に publish するための権限付与に必要）のみです。プロジェクトの IAM や WIF は変更できません。
+- Secret Manager の Secret に対して、デプロイ用サービスアカウントはバージョンの追加・破棄のみ、関数の実行用サービスアカウントは読み取りのみ可能です。
 
 ## ローカルでの動作確認
 

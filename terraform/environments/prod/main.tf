@@ -1,5 +1,5 @@
 terraform {
-  required_version = ">= 1.7"
+  required_version = ">= 1.11"
   required_providers {
     google = {
       source  = "hashicorp/google"
@@ -54,5 +54,23 @@ module "scheduled_function" {
     POST_LAYOUT   = "per_game"
     // Keep true until going live: collect and store, but do not post
     DRY_RUN = "true"
+  }
+}
+
+// Secret values come from GitHub secrets (TF_VAR_*) on apply and are never stored in state.
+// After changing a GitHub secret, bump its number here in the same PR to write the new value.
+module "secret_versions" {
+  source = "../../modules/secret_versions"
+
+  project = var.project
+  versions = {
+    "riot-api-key"      = 1
+    "x-app-credentials" = 1
+    "accounts"          = 1
+  }
+  values = {
+    "riot-api-key"      = var.riot_api_key
+    "x-app-credentials" = var.x_app_credentials
+    "accounts"          = var.accounts
   }
 }
