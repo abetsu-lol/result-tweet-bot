@@ -7,7 +7,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 from .text import kda, percent, signed
 
-ROWS_PER_IMAGE = 8
+ROWS_PER_IMAGE = 8  # preferred rows; more per image only when needed to stay within one post
 ASSETS = Path(__file__).parent / "assets"
 
 WIDTH = 1200

@@ -112,14 +112,28 @@ def test_switching_from_weekly_to_daily_picks_up_where_the_last_post_ended():
     assert result.games == 2 and x.posts[0]["text"].startswith("10/17〜10/19")
 
 
-def test_many_games_spread_over_images_and_posts():
+def test_many_games_fit_on_one_post_with_taller_images():
     start = datetime(2026, 10, 19, 12, 30, tzinfo=JST)
-    games = [game(f"JP1_{i}", start + timedelta(minutes=30 * i)) for i in range(33)]  # 5 images -> 2 posts
+    games = [game(f"JP1_{i}", start + timedelta(minutes=30 * i)) for i in range(33)]
     bucket = bucket_with(games)
     result, x = run(bucket, DRY_RUN="false")
-    assert result.posts == 2
-    assert [len(p["media_ids"]) for p in x.posts] == [4, 1]
-    assert x.posts[1]["reply_to"] == "post-1" and x.posts[1]["text"] == "10/19 続き（2/2）"
+    assert result.posts == 1 and len(x.posts) == 1
+    assert len(x.posts[0]["media_ids"]) == 4
+
+
+@pytest.mark.parametrize("count,sizes", [(1, [1]), (8, [8]), (9, [5, 4]), (12, [6, 6]), (32, [8, 8, 8, 8]),
+                                         (33, [9, 9, 9, 6]), (100, [25, 25, 25, 25])])
+def test_paginate_spreads_rows_evenly_over_at_most_four_images(count, sizes):
+    assert [len(page) for page in publish.paginate(list(range(count)))] == sizes
+
+
+def test_post_never_covers_more_than_seven_days():
+    games = [game("JP1_old", datetime(2026, 10, 10, 20, tzinfo=JST)),   # 10 days before the boundary
+             game("JP1_new", datetime(2026, 10, 19, 20, tzinfo=JST))]
+    bucket = bucket_with(games, last_post_end=datetime(2026, 10, 1, 12, tzinfo=JST).isoformat())
+    result, x = run(bucket, DRY_RUN="false")
+    assert result.games == 1 and result.period_start == (END - timedelta(days=7)).isoformat()
+    assert x.posts[0]["text"].startswith("10/13〜10/19")
 
 
 def test_summary_layout_and_text_format():

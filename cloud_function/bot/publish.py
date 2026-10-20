@@ -15,6 +15,7 @@ from . import aggregate, period, render, text
 from .collect import metrics_path, state_path
 
 IMAGES_PER_POST = 4  # X's limit for photos on one post
+MAX_SPAN = timedelta(days=7)  # a post never covers more than this, however long ago the last one was
 WEEKDAYS = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"]
 
 
@@ -56,6 +57,17 @@ def load_records(bucket, account_id, start, end):
     return sorted(in_window, key=lambda r: r["game_end"])
 
 
+def paginate(rows):
+    """Splits rows over at most IMAGES_PER_POST images, as evenly as possible.
+
+    ROWS_PER_IMAGE rows per image while that is enough; beyond that images get taller,
+    so a period's results always fit on a single post.
+    """
+    count = min(IMAGES_PER_POST, -(-len(rows) // render.ROWS_PER_IMAGE))
+    size = -(-len(rows) // count)
+    return [rows[i:i + size] for i in range(0, len(rows), size)]
+
+
 def build_posts(settings, records, champions, label):
     summary = text.summary(label, records)
     rows = aggregate.by_champion(records) if settings.post_layout == "summary" else records
@@ -70,12 +82,10 @@ def build_posts(settings, records, champions, label):
         return [Post(t) for t in text.split_into_posts(summary, lines)]
 
     draw = render.champions_image if settings.post_layout == "summary" else render.games_image
-    pages = [rows[i:i + render.ROWS_PER_IMAGE] for i in range(0, len(rows), render.ROWS_PER_IMAGE)]
+    pages = paginate(rows)
     images = [draw(f"{label} ソロランク" + (f"（{n}/{len(pages)}）" if len(pages) > 1 else ""), page, champions)
               for n, page in enumerate(pages, start=1)]
-    groups = [images[i:i + IMAGES_PER_POST] for i in range(0, len(images), IMAGES_PER_POST)]
-    return [Post(summary if n == 1 else f"{label} 続き（{n}/{len(groups)}）", group)
-            for n, group in enumerate(groups, start=1)]
+    return [Post(summary, images)]
 
 
 def publish(account, settings, bucket, champions, x_client_factory, now):
@@ -92,6 +102,7 @@ def publish(account, settings, bucket, champions, x_client_factory, now):
 
     last = state.get("last_post_end")
     start = datetime.fromisoformat(last) if last else end - default_span(settings.post_schedule)
+    start = max(start, end - MAX_SPAN)
     result.period_start = start.isoformat()
     if start >= end:
         result.status = "already_posted"
