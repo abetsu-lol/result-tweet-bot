@@ -5,6 +5,7 @@ name: Deploy
 #
 # Repository variable:        DEPLOY_ENABLED ("true")
 # Environment "prod" variables: GCP_PROJECT_ID, GCP_REGION, TF_STATE_BUCKET, GCP_WORKLOAD_PROVIDER, GCP_SA_EMAIL
+# Environment "prod" secrets:   RIOT_API_KEY, X_APP_CREDENTIALS, ACCOUNTS (written to Secret Manager, never to state)
 
 on:
   push:
@@ -55,6 +56,10 @@ jobs:
 
     - name: Terraform Apply
       working-directory: terraform/environments/prod
+      env:
+        TF_VAR_riot_api_key: ${{ secrets.RIOT_API_KEY }}
+        TF_VAR_x_app_credentials: ${{ secrets.X_APP_CREDENTIALS }}
+        TF_VAR_accounts: ${{ secrets.ACCOUNTS }}
       run: |
         terraform apply -auto-approve -input=false \
           -var="project=${{ vars.GCP_PROJECT_ID }}" \

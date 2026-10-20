@@ -13,3 +13,6 @@ crash.log
 
 # Build output
 build/
+
+# Filled-in secret files (keep them outside the repository; see secrets.example/)
+/secrets/
