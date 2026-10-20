@@ -174,3 +174,36 @@ def test_more_games_than_one_post_can_show_keeps_the_newest_and_says_so():
     assert all(len(page) <= 25 for page in publish.paginate(records[-publish.MAX_IMAGE_ROWS:]))
     assert post.text.startswith("10/13〜10/19 ソロランク 100勝1敗")  # the text still counts every game
     assert post.text.endswith("（画像は直近100試合）")
+
+
+def test_first_weekly_post_covers_seven_days():
+    games = [game("JP1_a", datetime(2026, 10, 13, 20, tzinfo=JST)), game("JP1_b", datetime(2026, 10, 19, 20, tzinfo=JST))]
+    result, x = run(bucket_with(games), DRY_RUN="false", POST_SCHEDULE="weekly:TUE")
+    assert result.games == 2 and result.period_start == (END - timedelta(days=7)).isoformat()
+
+
+def test_waits_when_nothing_has_been_collected_yet():
+    bucket = FakeBucket()  # no state at all (a brand new account)
+    result, x = run(bucket, DRY_RUN="false")
+    assert result.status == "waiting_for_collection" and x.posts == []
+
+
+def test_text_posts_are_chained_as_replies():
+    start = datetime(2026, 10, 19, 12, 30, tzinfo=JST)
+    games = [game(f"JP1_{i}", start + timedelta(minutes=30 * i)) for i in range(12)]
+    bucket = bucket_with(games, last_post_id="post-0", last_post_end=(END - timedelta(days=1)).isoformat())
+    result, x = run(bucket, DRY_RUN="false", POST_FORMAT="text")
+    assert result.posts == len(x.posts) > 1
+    assert [p["reply_to"] for p in x.posts] == ["post-0"] + [f"post-{i}" for i in range(1, len(x.posts))]
+    assert bucket.objects["state/main.json"]["last_post_id"] == f"post-{len(x.posts)}"
+
+
+def test_failed_image_upload_posts_nothing_and_keeps_state():
+    class FailingUpload(FakeX):
+        def upload_png(self, data):
+            raise RuntimeError("upload failed")
+    bucket = bucket_with([game("JP1_1", datetime(2026, 10, 19, 20, tzinfo=JST))])
+    x = FailingUpload()
+    with pytest.raises(RuntimeError):
+        run(bucket, x, DRY_RUN="false")
+    assert x.posts == [] and "last_post_end" not in bucket.objects["state/main.json"]

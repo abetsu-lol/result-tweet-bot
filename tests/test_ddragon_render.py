@@ -80,3 +80,16 @@ def test_long_champion_names_are_shrunk_to_fit():
             return "とてもながいチャンピオンのなまえ" * 2
     png = render.games_image("10/19", [metrics("Ahri", True)], LongNames())
     assert Image.open(io.BytesIO(png)).size[0] == render.WIDTH
+
+
+def test_bundled_fonts_cover_every_character_drawn_on_images():
+    """Labels drawn on images must exist in the subset fonts (re-run scripts/build_font.py after editing)."""
+    import re
+    from pathlib import Path
+    from fontTools.ttLib import TTFont
+    sources = [Path(render.__file__), Path(render.__file__).with_name("publish.py")]
+    used = {ch for path in sources for literal in re.findall(r'"([^"\n]*)"', path.read_text(encoding="utf-8"))
+            for ch in literal if ord(ch) > 0x7F}
+    for weight in ("Regular", "Bold"):
+        cmap = TTFont(str(render.ASSETS / f"NotoSansJP-{weight}-subset.otf")).getBestCmap()
+        assert sorted(ch for ch in used if ord(ch) not in cmap) == [], weight
