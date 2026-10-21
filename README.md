@@ -1,17 +1,26 @@
 # result-tweet-bot
 
-毎日定時に実行される Python ジョブ（Google Cloud Functions 1st gen, Pub/Sub トリガー）と、そのインフラ一式。
+League of Legends の指定したアカウントのランク戦（ソロ / デュオ）の戦績を Riot Games API から取得して保存し、X（旧 Twitter）の固定ポストへのリプライとして毎日投稿するボットと、そのインフラ一式です。
+
+毎日 12:05（JST）に Google Cloud Functions（1st gen、Cloud Scheduler → Pub/Sub で起動）が実行され、前日 12:00〜当日 12:00 に終わった試合を集計して投稿します。
 
 ```
 cloud_function/   アプリ本体（エントリポイント: daily_job(event, context)）
 terraform/
-  bootstrap/prod/     CI の前提となるリソース（WIF・デプロイ用サービスアカウント）。ローカルから apply
-  environments/prod/  アプリのリソース（Cloud Function・Pub/Sub・Cloud Scheduler）。CI から apply
+  bootstrap/prod/     CI の前提となるリソース（WIF・デプロイ用 / 関数の実行用サービスアカウント・ビルドの権限・Secret の器・戦績データ用バケット）。ローカルから apply
+  environments/prod/  アプリのリソース（Cloud Function・Pub/Sub・Cloud Scheduler・イメージ用 Artifact Registry・Secret の値）。CI から apply
   modules/scheduled_function/  Cloud Function + Pub/Sub + Cloud Scheduler + イメージ用 Artifact Registry（最新 2 件のみ保持）
+  modules/secret_versions/     Secret Manager の Secret の値（書き込み専用。plan と state に残らない）
   modules/github_actions_wif/  GitHub Actions 用 Workload Identity Federation とデプロイ用サービスアカウント
   modules/function_build_iam/  関数のビルドに Cloud Build が使うサービスアカウント（Compute Engine のデフォルト SA）の権限
   modules/function_runtime/    関数の実行用サービスアカウント・Secret Manager の Secret（器のみ）・戦績データ用バケットと権限
-scripts/          tfstate 用バケットの作成（bootstrap）・パッケージング用スクリプト
+scripts/
+  bootstrap.sh         tfstate 用バケットの作成
+  package_function.sh  cloud_function/ を zip にする（デプロイ時に CI が実行）
+  set_secrets.sh       API キーなどを検証して GitHub Secrets に登録する
+  build_font.py        画像用の日本語フォント（使う文字だけに絞ったもの）を作る
+secrets.example/  set_secrets.sh で使う、値を記入するファイルのテンプレート
+tests/            テスト（pytest）
 .github/workflows/deploy.yml  main への push で terraform/environments/prod を apply
 ```
 
@@ -25,7 +34,7 @@ fork（または clone して自分のリポジトリに push）し、以下の�
 | --- | --- | --- | --- |
 | tfstate 用バケット | `scripts/bootstrap.sh`（gcloud） | ローカル | — |
 | `terraform/bootstrap/prod` | WIF プール / プロバイダ、デプロイ用サービスアカウントとその権限、関数のビルドに使うサービスアカウントの権限、関数の実行用サービスアカウント・Secret・戦績データ用バケット | ローカル（初回とまれな変更のみ） | `terraform/bootstrap` |
-| `terraform/environments/prod` | Cloud Function・Pub/Sub・Cloud Scheduler | CI | `terraform/state` |
+| `terraform/environments/prod` | Cloud Function・Pub/Sub・Cloud Scheduler・イメージ用 Artifact Registry・Secret の値 | CI | `terraform/state` |
 
 CI の認証情報と IAM は CI の管理対象外にしているため、デプロイ用サービスアカウントにはプロジェクトの IAM を変更する権限がありません。
 
@@ -60,7 +69,7 @@ Terraform の変数との対応:
 
 ## 自分の環境にデプロイする
 
-前提: GCP プロジェクト（課金有効）、`gcloud`、`gh`、Terraform >= 1.11、GitHub リポジトリ、bash（Windows では Git Bash）。
+前提: GCP プロジェクト（課金有効）、`gcloud`、`gh`、Terraform >= 1.11、Python >= 3.12、GitHub リポジトリ、bash（Windows では Git Bash）。
 ローカルでの作業はプロジェクトのオーナー権限で行います。
 
 ### 1. tfstate 用バケットを作成（ローカル・初回のみ）
@@ -75,7 +84,9 @@ gcloud auth login
 state の過去の版はバージョニングで保持され、古い版（新しい版が 5 つ以上ある、または古い版になって 90 日経過）だけが自動削除されます。
 誤って壊した場合は `gcloud storage ls -a gs://<bucket>/terraform/` で過去の版を確認して復元できます。
 
-### 2. WIF とデプロイ用サービスアカウントを作成（ローカル・初回とまれな変更のみ）
+### 2. CI の前提となるリソースを作成（ローカル・初回とまれな変更のみ）
+
+WIF、デプロイ用 / 関数の実行用サービスアカウント、ビルドの権限、Secret の器、戦績データ用バケットを作成します。
 
 値はファイルに保存せず、引数で渡します。
 
@@ -135,6 +146,24 @@ Riot の Development キーは 24 時間で失効するため、開発中は毎�
 ./scripts/set_secrets.sh --direct RIOT_API_KEY
 ```
 
+## Riot Games API の使い方
+
+開発中は Development キー、公開後は Personal キーで運用します。
+
+| API | エンドポイント | 用途 | 呼び出し |
+| --- | --- | --- | --- |
+| ACCOUNT-V1 | `GET /riot/account/v1/accounts/by-riot-id/{gameName}/{tagLine}` | Riot ID から PUUID を取得 | 初回と Riot ID が変わったときのみ（PUUID は保存して再利用） |
+| MATCH-V5 | `GET /lol/match/v5/matches/by-puuid/{puuid}/ids`（`queue=420`、`startTime` / `endTime` 指定） | 前回の続きから終わった試合の ID を取得 | 1 日 1 回（100 件ごとにページ分け） |
+| MATCH-V5 | `GET /lol/match/v5/matches/{matchId}` | 試合の詳細 | 一覧で得た試合ごとに 1 回（一覧は開始時刻で絞り込むため、2 時間前に始まった試合も取得し、終了時刻で選び直す） |
+| MATCH-V5 | `GET /lol/match/v5/matches/{matchId}/timeline` | 15 分時点の指標の計算 | 15 分以上の試合ごとに 1 回 |
+
+- ルーティングはアカウントのサーバー（`platform`）から決まる地域（日本は `asia`）を使います。
+- 1 アカウントあたりの呼び出しは、1 日に「約 2 × 試合数 + 1〜2 回」です（1 日 10 試合なら約 22 回）。Development / Personal キーのレート制限（20 回 / 秒、100 回 / 2 分）の範囲に収まります。
+- 429（レート制限）は `Retry-After` に従って待ってから再試行し、5xx は間隔を空けて再試行します。
+- すべてのリクエストに `User-Agent: result-tweet-bot/<version>` を付けます。
+- API キーは Secret Manager に保存し、実行時に読み込みます（コードやログには含めない）。
+- チャンピオンの日本語名とアイコンは Data Dragon（`ddragon.leagueoflegends.com`、API キー不要）から取得します。
+
 ## セキュリティ
 
 - Workload Identity Federation で、`github_repository` の `deploy_branch`（既定 `main`）で動くワークフローだけが認証できます。fork や Pull Request からは認証できません。
@@ -193,3 +222,11 @@ python -m venv .venv
 Riot API・GCS・Secret Manager は偽物に差し替えて実行します（通信しない）。
 
 依存ライブラリは `==` で固定し（デプロイのたびに中身が変わらないようにするため）、固定した時点の最新版を選んでいます。以後の更新は Dependabot の PR で行います。
+
+## ライセンス・免責事項
+
+MIT License（[LICENSE](LICENSE)）。画像に同梱しているフォントは SIL Open Font License 1.1（`cloud_function/bot/assets/OFL.txt`）。
+
+result-tweet-bot isn't endorsed by Riot Games and doesn't reflect the views or opinions of Riot Games or anyone officially involved in producing or managing Riot Games properties. Riot Games, and all associated properties are trademarks or registered trademarks of Riot Games, Inc.
+
+（result-tweet-bot は Riot Games が承認したものではなく、Riot Games および Riot Games の資産の制作・管理に公式に関わる人の見解や意見を反映するものではありません。Riot Games および関連するすべての資産は、Riot Games, Inc. の商標または登録商標です。）
