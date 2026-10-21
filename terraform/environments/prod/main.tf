@@ -65,8 +65,8 @@ module "secret_versions" {
   project = var.project
   versions = {
     "riot-api-key"      = 2
-    "x-app-credentials" = 1
-    "accounts"          = 1
+    "x-app-credentials" = 2
+    "accounts"          = 2
   }
   values = {
     "riot-api-key"      = var.riot_api_key
