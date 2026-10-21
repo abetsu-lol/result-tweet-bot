@@ -183,7 +183,7 @@ Riot の Development キーは 24 時間で失効するため、Development キ�
 | `bot/collect.py` | 前回の続きから、終了時刻が 12:00〜12:00（JST）に入るソロ / デュオ（queue 420）の試合を取得し、元データと指標を保存する（15 分未満の試合は除外） |
 | `bot/metrics.py` | 試合ごとの指標。`@metric("名前")` を付けた関数を追加すると、以後の試合に保存される |
 | `bot/publish.py` | 投稿するか（`POST_SCHEDULE`）と対象期間を決め、保存済みの指標から投稿を組み立てて固定ポストのリプライツリーに投稿する。`DRY_RUN` では投稿せず `previews/` に保存 |
-| `bot/render.py` / `bot/aggregate.py` / `bot/text.py` | 表の画像（試合ごと / チャンピオン別）、本文、X の文字数の数え方（日本語は 2） |
+| `bot/render.py` / `bot/aggregate.py` / `bot/text.py` | 表の画像（試合ごと / チャンピオン別）、本文、X の文字数の数え方（日本語は 2）。試合ごとの表のレーンのアイコンは Pillow で描いた自作のもの（Riot の素材は使っていない） |
 | `bot/ddragon.py` | チャンピオンの日本語名とアイコン（Data Dragon） |
 | `bot/x.py` | X API（OAuth 1.0a、画像のアップロード、リプライ）。投稿は再試行しない |
 | `bot/period.py` | 日の区切り（12:00 JST。日付は区切りの開始日） |
