@@ -140,7 +140,8 @@ Terraform は値の変化を比べられないので、**値を変えたら `ter
 
 3. `module "secret_versions"` の番号を上げる PR を出してマージする（初回は 1 のままでよい）
 
-Riot の Development キーは 24 時間で失効するため、開発中は毎日次を実行して更新します。GitHub Secret と同時に Secret Manager にも直接書き込むので、PR は不要です（関数は常に最新のバージョンを読む）。
+Personal / Production キーは失効しないため、上の手順（番号を上げる PR）で更新します。
+Riot の Development キーは 24 時間で失効するため、Development キーで開発している間は毎日次を実行して更新します。GitHub Secret と同時に Secret Manager にも直接書き込むので、PR は不要です（関数は常に最新のバージョンを読む）。
 
 ```bash
 ./scripts/set_secrets.sh --direct RIOT_API_KEY
