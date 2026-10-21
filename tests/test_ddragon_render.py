@@ -93,3 +93,22 @@ def test_bundled_fonts_cover_every_character_drawn_on_images():
     for weight in ("Regular", "Bold"):
         cmap = TTFont(str(render.ASSETS / f"NotoSansJP-{weight}-subset.otf")).getBestCmap()
         assert sorted(ch for ch in used if ord(ch) not in cmap) == [], weight
+
+
+def test_lane_icons_are_distinct_and_unknown_positions_have_none():
+    positions = ["TOP", "JUNGLE", "MIDDLE", "BOTTOM", "UTILITY"]
+    icons = [render.lane_icon(p) for p in positions]
+    assert all(icon.size == (render.LANE_ICON, render.LANE_ICON) for icon in icons)
+    assert len({icon.tobytes() for icon in icons}) == len(positions)
+    assert render.lane_icon("") is None and render.lane_icon(None) is None and render.lane_icon("ADC") is None
+
+
+def test_support_highlights_no_lane_but_bottom_does():
+    corner = (render.LANE_ICON - 7, render.LANE_ICON - 7)  # on the bottom lane's corner
+    assert render.lane_icon("BOTTOM").getpixel(corner)[:3] != render.lane_icon("UTILITY").getpixel(corner)[:3]
+
+
+def test_games_without_position_still_render():
+    record = metrics("Ahri", True)
+    record["metrics"]["position"] = None
+    assert render.games_image("10/19", [record], FakeChampions()).startswith(b"\x89PNG")
