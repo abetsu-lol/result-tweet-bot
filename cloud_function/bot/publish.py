@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 
 from . import aggregate, period, render, text
-from .collect import metrics_path, state_path
+from .collect import metrics_path, rank_path, state_path
 
 IMAGES_PER_POST = 4  # X's limit for photos on one post
 MAX_IMAGE_ROWS = IMAGES_PER_POST * render.MAX_ROWS_PER_IMAGE  # rows one post can show
@@ -70,8 +70,8 @@ def paginate(rows):
     return [rows[i:i + size] for i in range(0, len(rows), size)]
 
 
-def build_posts(settings, records, champions, label):
-    summary = text.summary(label, records)
+def build_posts(settings, records, champions, label, rank_snapshot=None):
+    summary = text.summary(label, records, rank_snapshot)
     rows = aggregate.by_champion(records) if settings.post_layout == "summary" else records
 
     if settings.post_format == "text":
@@ -117,7 +117,7 @@ def publish(account, settings, bucket, champions, x_client_factory, now):
     result.games = len(records)
     if records:
         label = text.period_label(period.day_of(start), period.day_of(end - timedelta(microseconds=1)))
-        posts = build_posts(settings, records, champions, label)
+        posts = build_posts(settings, records, champions, label, bucket.read_json(rank_path(account.id, end)))
         result.posts = len(posts)
         if settings.dry_run:
             result.status = "previewed"

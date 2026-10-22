@@ -3,6 +3,7 @@
 Layout (paths are derived, never listed):
   raw/matches/<match id>.json.gz       {"match": ..., "timeline": ...}, written once per match
   metrics/<account id>/<day>.ndjson    one record per game of that day (see period.day_of)
+  ranks/<account id>/<date>.json       solo/duo rank right after the 12:00 JST boundary of <date>
   state/<account id>.json              how far collection / posting have got
 
 The PUUID is looked up on every run instead of being stored: PUUIDs are encrypted per API key,
@@ -13,6 +14,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 
 from . import metrics, period
+from .http import HttpError
 
 SCHEMA_VERSION = 1
 OBSOLETE_STATE_KEYS = ("riot_id", "puuid", "puuid_key_id", "previous_puuids")  # from the old PUUID cache
@@ -24,6 +26,10 @@ def raw_path(match_id):
 
 def metrics_path(account_id, day):
     return f"metrics/{account_id}/{day}.ndjson"
+
+
+def rank_path(account_id, boundary):
+    return f"ranks/{account_id}/{boundary.astimezone(period.JST).date().isoformat()}.json"
 
 
 def state_path(account_id):
@@ -38,6 +44,7 @@ class CollectResult:
     collected: int = 0
     skipped_short: int = 0
     days: list = field(default_factory=list)
+    rank: str = ""  # stored | unranked | failed: <reason>
 
 
 def game_end(info):
@@ -97,7 +104,23 @@ def collect(account, riot, bucket, now):
         bucket.write_ndjson(metrics_path(account.id, day), sorted(merged.values(), key=lambda r: r["game_end"]))
         result.days.append(day)
 
+    if start < end:
+        result.rank = store_rank(account, riot, bucket, puuid, end, now)
+
     # Only advance after everything is stored, so a failed run is simply redone next time
     kept = {k: v for k, v in state.items() if k not in OBSOLETE_STATE_KEYS}
     bucket.write_json(state_path(account.id), {**kept, "last_collected_end": end.isoformat()})
     return result
+
+
+def store_rank(account, riot, bucket, puuid, boundary, now):
+    """Saves the current solo/duo rank for the post of this boundary.
+
+    A failure is reported but does not fail the collection: the post is then made without a rank.
+    """
+    try:
+        rank = riot.solo_duo_rank(account.riot.platform, puuid)
+    except HttpError as error:
+        return f"failed: {error}"
+    bucket.write_json(rank_path(account.id, boundary), {"fetched_at": now.isoformat(), "solo_duo": rank})
+    return "stored" if rank else "unranked"

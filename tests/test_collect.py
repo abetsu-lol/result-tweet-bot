@@ -151,3 +151,29 @@ def test_records_keep_the_participant_id():
     bucket.objects["state/main.json"] = {"last_collected_end": datetime(2026, 10, 19, 12, tzinfo=JST).isoformat()}
     collect.collect(ACCOUNT, riot, bucket, NOW)
     assert bucket.objects["metrics/main/2026-10-19.ndjson"][0]["participant_id"] == 3
+
+
+def test_stores_the_rank_for_the_boundary():
+    riot = riot_with({})
+    bucket = FakeBucket()
+    bucket.objects["state/main.json"] = {"last_collected_end": datetime(2026, 10, 19, 12, tzinfo=JST).isoformat()}
+    result = collect.collect(ACCOUNT, riot, bucket, NOW)
+    assert result.rank == "stored"
+    assert ("rank", "jp1") in riot.calls
+    assert bucket.objects["ranks/main/2026-10-20.json"]["solo_duo"]["tier"] == "GOLD"
+
+
+def test_unranked_and_failed_rank_lookups_do_not_fail_collection():
+    from bot.http import HttpError
+    riot = riot_with({})
+    riot.rank = None
+    bucket = FakeBucket()
+    assert collect.collect(ACCOUNT, riot, bucket, NOW).rank == "unranked"
+    assert bucket.objects["ranks/main/2026-10-20.json"]["solo_duo"] is None
+
+    riot, bucket = riot_with({}), FakeBucket()
+    riot.rank = HttpError(503, "https://jp1.api.riotgames.com/lol/league/v4/entries/by-puuid/p")
+    result = collect.collect(ACCOUNT, riot, bucket, NOW)
+    assert result.rank.startswith("failed: HTTP 503")
+    assert "ranks/main/2026-10-20.json" not in bucket.objects
+    assert bucket.objects["state/main.json"]["last_collected_end"] == datetime(2026, 10, 20, 12, tzinfo=JST).isoformat()

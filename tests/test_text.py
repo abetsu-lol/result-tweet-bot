@@ -41,3 +41,18 @@ def test_split_into_posts_respects_the_weighted_limit():
     assert all(text.weighted_length(p) <= text.MAX_WEIGHTED_LENGTH for p in posts)
     assert posts[0].startswith(header)
     assert "\n".join(posts).split("\n")[1:] == lines  # every line once, in order
+
+
+def test_rank_line():
+    gold = {"tier": "GOLD", "rank": "II", "league_points": 45, "wins": 1, "losses": 1}
+    assert text.rank_line({"solo_duo": gold}) == "ランク: ゴールド II 45LP"
+    assert text.rank_line({"solo_duo": {**gold, "tier": "GRANDMASTER", "rank": "I", "league_points": 512}}) == \
+        "ランク: グランドマスター 512LP"
+    assert text.rank_line({"solo_duo": None}) == "ランク: なし"
+    assert text.rank_line(None) is None
+
+
+def test_summary_ends_with_the_rank_when_known():
+    snapshot = {"solo_duo": {"tier": "DIAMOND", "rank": "IV", "league_points": 0, "wins": 1, "losses": 1}}
+    assert text.summary("10/19", [record()], snapshot).splitlines()[-1] == "ランク: ダイヤモンド IV 0LP"
+    assert len(text.summary("10/19", [record()]).splitlines()) == 2

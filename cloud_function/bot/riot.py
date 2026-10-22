@@ -1,9 +1,10 @@
-"""Riot Games API: account-v1 and match-v5."""
+"""Riot Games API: account-v1, match-v5 and league-v4."""
 from urllib.parse import quote
 
 from .http import new_session, request
 
 SOLO_DUO_QUEUE = 420
+SOLO_DUO_QUEUE_TYPE = "RANKED_SOLO_5x5"  # league-v4 name of queue 420
 MATCH_IDS_PAGE = 100  # maximum count per match-v5 ids request
 
 
@@ -39,3 +40,13 @@ class RiotClient:
 
     def timeline(self, region, match_id):
         return self._get(region, f"/lol/match/v5/matches/{match_id}/timeline")
+
+    def solo_duo_rank(self, platform, puuid):
+        """Current solo/duo rank, or None when unranked. league-v4 is routed by platform (e.g. jp1)."""
+        url = f"https://{platform}.api.riotgames.com/lol/league/v4/entries/by-puuid/{puuid}"
+        entries = request(self._session, "GET", url, **self._request_kwargs).json()
+        entry = next((e for e in entries if e.get("queueType") == SOLO_DUO_QUEUE_TYPE), None)
+        if entry is None:
+            return None
+        return {"tier": entry["tier"], "rank": entry["rank"], "league_points": entry["leaguePoints"],
+                "wins": entry["wins"], "losses": entry["losses"]}
