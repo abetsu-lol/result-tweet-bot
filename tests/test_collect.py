@@ -39,7 +39,7 @@ def test_collects_games_ending_in_window_and_stores_raw_metrics_and_state():
     assert records[0]["schema_version"] == collect.SCHEMA_VERSION
     state = bucket.objects["state/main.json"]
     assert state["last_collected_end"] == datetime(2026, 10, 20, 12, tzinfo=JST).isoformat()
-    assert state["puuid"] == "puuid-me" and state["riot_id"] == "名前#JP1"
+    assert set(state) == {"last_collected_end"}  # the PUUID is not stored
 
 
 def test_skips_short_games_and_games_outside_the_window():
@@ -59,7 +59,7 @@ def test_skips_short_games_and_games_outside_the_window():
     assert ("timeline", "JP1_remake") not in riot.calls  # no timeline fetched for excluded games
 
 
-def test_rerun_merges_without_duplicates_and_reuses_puuid():
+def test_rerun_merges_without_duplicates_and_looks_up_the_puuid_each_time():
     end = datetime(2026, 10, 19, 20, 0, tzinfo=JST)
     riot = riot_with({"JP1_1": (end, 1800)})
     bucket = FakeBucket()
@@ -70,15 +70,7 @@ def test_rerun_merges_without_duplicates_and_reuses_puuid():
     collect.collect(ACCOUNT, riot, bucket, NOW)
 
     assert [r["match_id"] for r in bucket.objects["metrics/main/2026-10-19.ndjson"]] == ["JP1_1"]
-    assert sum(1 for c in riot.calls if c[0] == "puuid") == 1
-
-
-def test_changed_riot_id_refreshes_puuid():
-    riot = riot_with({})
-    bucket = FakeBucket()
-    bucket.objects["state/main.json"] = {"riot_id": "old#JP1", "puuid": "stale"}
-    collect.collect(ACCOUNT, riot, bucket, NOW)
-    assert bucket.objects["state/main.json"]["puuid"] == "puuid-me"
+    assert sum(1 for c in riot.calls if c[0] == "puuid") == 2
 
 
 def test_match_ids_query_looks_back_for_long_games():
@@ -124,13 +116,15 @@ def test_empty_window_calls_no_match_api():
     bucket = FakeBucket()
     end = datetime(2026, 10, 20, 12, tzinfo=JST)
     bucket.objects["state/main.json"] = {"last_collected_end": end.isoformat(), "puuid": "puuid-me",
-                                         "riot_id": "名前#JP1", "last_post_id": "9"}
+                                         "puuid_key_id": "key-1", "riot_id": "名前#JP1", "last_post_id": "9"}
 
     result = collect.collect(ACCOUNT, riot, bucket, datetime(2026, 10, 20, 18, 0, tzinfo=JST))
 
     assert result.collected == 0 and result.days == []
     assert riot.calls == []  # neither puuid nor match lookups
-    assert bucket.objects["state/main.json"]["last_post_id"] == "9"  # other state is kept
+    state = bucket.objects["state/main.json"]
+    assert state["last_post_id"] == "9"  # other state is kept
+    assert not set(collect.OBSOLETE_STATE_KEYS) & set(state)  # the old PUUID cache is dropped
 
 
 def test_game_ending_exactly_at_a_boundary_belongs_to_the_new_day():
@@ -149,3 +143,11 @@ def test_end_time_falls_back_to_start_plus_duration_for_old_matches():
     match = f.match(end=datetime(2026, 10, 19, 20, 0, tzinfo=JST), duration=1800)
     del match["info"]["gameEndTimestamp"]
     assert collect.game_end(match["info"]) == datetime(2026, 10, 19, 20, 0, tzinfo=JST)
+
+
+def test_records_keep_the_participant_id():
+    riot = riot_with({"JP1_1": (datetime(2026, 10, 19, 20, 0, tzinfo=JST), 1800)})
+    bucket = FakeBucket()
+    bucket.objects["state/main.json"] = {"last_collected_end": datetime(2026, 10, 19, 12, tzinfo=JST).isoformat()}
+    collect.collect(ACCOUNT, riot, bucket, NOW)
+    assert bucket.objects["metrics/main/2026-10-19.ndjson"][0]["participant_id"] == 3
