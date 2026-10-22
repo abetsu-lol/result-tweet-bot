@@ -7,6 +7,7 @@ class FakeRiot:
         self.matches = matches or {}       # match id -> match payload
         self.timelines = timelines or {}   # match id -> timeline payload
         self._puuid = puuid
+        self.rank = {"tier": "GOLD", "rank": "II", "league_points": 45, "wins": 10, "losses": 8}
         self.calls = []
 
     def puuid(self, account):
@@ -18,6 +19,12 @@ class FakeRiot:
         ids = [mid for mid, m in self.matches.items()
                if start_time <= m["info"]["gameStartTimestamp"] // 1000 <= end_time]
         return sorted(ids, reverse=True)
+
+    def solo_duo_rank(self, platform, puuid):
+        self.calls.append(("rank", platform))
+        if isinstance(self.rank, Exception):
+            raise self.rank
+        return self.rank
 
     def match(self, region, match_id):
         self.calls.append(("match", match_id))

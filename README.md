@@ -157,9 +157,10 @@ Riot の Development キーは 24 時間で失効するため、Development キ�
 | MATCH-V5 | `GET /lol/match/v5/matches/by-puuid/{puuid}/ids`（`queue=420`、`startTime` / `endTime` 指定） | 前回の続きから終わった試合の ID を取得 | 1 日 1 回（100 件ごとにページ分け） |
 | MATCH-V5 | `GET /lol/match/v5/matches/{matchId}` | 試合の詳細 | 一覧で得た試合ごとに 1 回（一覧は開始時刻で絞り込むため、2 時間前に始まった試合も取得し、終了時刻で選び直す） |
 | MATCH-V5 | `GET /lol/match/v5/matches/{matchId}/timeline` | 15 分時点の指標の計算 | 15 分以上の試合ごとに 1 回 |
+| LEAGUE-V4 | `GET /lol/league/v4/entries/by-puuid/{puuid}` | 区切りの時点のソロ / デュオのランクと LP（投稿の本文に表示） | 1 日 1 回 |
 
-- ルーティングはアカウントのサーバー（`platform`）から決まる地域（日本は `asia`）を使います。
-- 1 アカウントあたりの呼び出しは、1 日に「約 2 × 試合数 + 2 回」です（1 日 10 試合なら約 22 回）。Development / Personal キーのレート制限（20 回 / 秒、100 回 / 2 分）の範囲に収まります。
+- ACCOUNT-V1 / MATCH-V5 はアカウントのサーバー（`platform`）から決まる地域（日本は `asia`）、LEAGUE-V4 はサーバー（日本は `jp1`）にルーティングします。
+- 1 アカウントあたりの呼び出しは、1 日に「約 2 × 試合数 + 3 回」です（1 日 10 試合なら約 23 回）。Development / Personal キーのレート制限（20 回 / 秒、100 回 / 2 分）の範囲に収まります。
 - 429（レート制限）は `Retry-After` に従って待ってから再試行し、5xx は間隔を空けて再試行します。
 - すべてのリクエストに `User-Agent: result-tweet-bot/<version>` を付けます。
 - API キーは Secret Manager に保存し、実行時に読み込みます（コードやログには含めない）。
@@ -196,6 +197,7 @@ Riot の Development キーは 24 時間で失効するため、Development キ�
 | --- | --- |
 | `raw/matches/<match id>.json.gz` | 試合の詳細とタイムライン（gzip）。試合ごとに 1 回だけ書き込む |
 | `metrics/<account id>/<日付>.ndjson` | その日の試合の指標（1 行 1 試合）。`participant_id` で元データの中の自分を特定できる |
+| `ranks/<account id>/<日付>.json` | その日の 12:00 の区切りの直後に取得したソロ / デュオのランク（投稿の本文に表示）。取得に失敗した日はなく、本文のランクの行が省かれる |
 | `state/<account id>.json` | 収集・投稿の進み具合（`last_collected_end` / `last_post_end` / `last_post_id`）。PUUID は API キーごとに暗号化された値なので保存せず、実行のたびに取得する |
 | `previews/<account id>/<日付>/` | `DRY_RUN` のときに作った投稿の本文と画像 |
 

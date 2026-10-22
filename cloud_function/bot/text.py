@@ -39,14 +39,36 @@ def average(values):
     return sum(values) / len(values) if values else None
 
 
-def summary(label, records):
-    """First post's text: the period, the win-loss record and averages."""
+TIERS_JA = {
+    "IRON": "アイアン", "BRONZE": "ブロンズ", "SILVER": "シルバー", "GOLD": "ゴールド", "PLATINUM": "プラチナ",
+    "EMERALD": "エメラルド", "DIAMOND": "ダイヤモンド", "MASTER": "マスター", "GRANDMASTER": "グランドマスター",
+    "CHALLENGER": "チャレンジャー",
+}
+APEX_TIERS = ("MASTER", "GRANDMASTER", "CHALLENGER")  # no divisions
+
+
+def rank_line(snapshot):
+    """"ランク: ゴールド II 45LP"; "ランク: なし" when unranked; None when no snapshot was stored."""
+    if snapshot is None:
+        return None
+    rank = snapshot.get("solo_duo")
+    if not rank:
+        return "ランク: なし"
+    tier = TIERS_JA.get(rank["tier"], rank["tier"])
+    division = "" if rank["tier"] in APEX_TIERS else f" {rank['rank']}"
+    return f"ランク: {tier}{division} {rank['league_points']}LP"
+
+
+def summary(label, records, rank_snapshot=None):
+    """First post's text: the period, the win-loss record, averages and the rank at the end."""
     wins = sum(1 for r in records if r["metrics"]["win"])
     losses = len(records) - wins
     gold = average([r["metrics"]["gold_diff_15"] for r in records])
     kp = average([r["metrics"]["kill_participation"] for r in records])
-    return (f"{label} ソロランク {wins}勝{losses}敗\n"
-            f"平均 GD@15 {signed(None if gold is None else round(gold))} / KP {percent(kp)}")
+    lines = [f"{label} ソロランク {wins}勝{losses}敗",
+             f"平均 GD@15 {signed(None if gold is None else round(gold))} / KP {percent(kp)}"]
+    rank = rank_line(rank_snapshot)
+    return "\n".join(lines + ([rank] if rank else []))
 
 
 def game_line(record, champions):

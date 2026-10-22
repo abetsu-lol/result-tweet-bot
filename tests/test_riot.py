@@ -57,3 +57,14 @@ def test_match_and_timeline_paths():
         "https://asia.api.riotgames.com/lol/match/v5/matches/JP1_1",
         "https://asia.api.riotgames.com/lol/match/v5/matches/JP1_1/timeline",
     ]
+
+
+def test_solo_duo_rank_picks_the_solo_queue_from_the_platform_host():
+    session = Session([{"queueType": "RANKED_FLEX_SR", "tier": "SILVER", "rank": "I", "leaguePoints": 1, "wins": 1, "losses": 1},
+                       {"queueType": "RANKED_SOLO_5x5", "tier": "GOLD", "rank": "II", "leaguePoints": 45, "wins": 10,
+                        "losses": 8, "hotStreak": False}],
+                      [])
+    client = RiotClient("k", session)
+    assert client.solo_duo_rank("jp1", "p") == {"tier": "GOLD", "rank": "II", "league_points": 45, "wins": 10, "losses": 8}
+    assert session.calls[0][0] == "https://jp1.api.riotgames.com/lol/league/v4/entries/by-puuid/p"
+    assert client.solo_duo_rank("jp1", "p") is None  # unranked: no entries
