@@ -3,8 +3,7 @@ import copy
 
 
 class FakeRiot:
-    def __init__(self, matches=None, timelines=None, puuid="puuid-me", key_id="key-1"):
-        self.key_id = key_id
+    def __init__(self, matches=None, timelines=None, puuid="puuid-me"):
         self.matches = matches or {}       # match id -> match payload
         self.timelines = timelines or {}   # match id -> timeline payload
         self._puuid = puuid

@@ -153,13 +153,13 @@ Riot の Development キーは 24 時間で失効するため、Development キ�
 
 | API | エンドポイント | 用途 | 呼び出し |
 | --- | --- | --- | --- |
-| ACCOUNT-V1 | `GET /riot/account/v1/accounts/by-riot-id/{gameName}/{tagLine}` | Riot ID から PUUID を取得 | 初回と Riot ID が変わったときのみ（PUUID は保存して再利用） |
+| ACCOUNT-V1 | `GET /riot/account/v1/accounts/by-riot-id/{gameName}/{tagLine}` | Riot ID から PUUID を取得 | 1 日 1 回（PUUID は API キーごとに暗号化された値なので保存しない） |
 | MATCH-V5 | `GET /lol/match/v5/matches/by-puuid/{puuid}/ids`（`queue=420`、`startTime` / `endTime` 指定） | 前回の続きから終わった試合の ID を取得 | 1 日 1 回（100 件ごとにページ分け） |
 | MATCH-V5 | `GET /lol/match/v5/matches/{matchId}` | 試合の詳細 | 一覧で得た試合ごとに 1 回（一覧は開始時刻で絞り込むため、2 時間前に始まった試合も取得し、終了時刻で選び直す） |
 | MATCH-V5 | `GET /lol/match/v5/matches/{matchId}/timeline` | 15 分時点の指標の計算 | 15 分以上の試合ごとに 1 回 |
 
 - ルーティングはアカウントのサーバー（`platform`）から決まる地域（日本は `asia`）を使います。
-- 1 アカウントあたりの呼び出しは、1 日に「約 2 × 試合数 + 1〜2 回」です（1 日 10 試合なら約 22 回）。Development / Personal キーのレート制限（20 回 / 秒、100 回 / 2 分）の範囲に収まります。
+- 1 アカウントあたりの呼び出しは、1 日に「約 2 × 試合数 + 2 回」です（1 日 10 試合なら約 22 回）。Development / Personal キーのレート制限（20 回 / 秒、100 回 / 2 分）の範囲に収まります。
 - 429（レート制限）は `Retry-After` に従って待ってから再試行し、5xx は間隔を空けて再試行します。
 - すべてのリクエストに `User-Agent: result-tweet-bot/<version>` を付けます。
 - API キーは Secret Manager に保存し、実行時に読み込みます（コードやログには含めない）。
@@ -195,8 +195,8 @@ Riot の Development キーは 24 時間で失効するため、Development キ�
 | パス | 内容 |
 | --- | --- |
 | `raw/matches/<match id>.json.gz` | 試合の詳細とタイムライン（gzip）。試合ごとに 1 回だけ書き込む |
-| `metrics/<account id>/<日付>.ndjson` | その日の試合の指標（1 行 1 試合） |
-| `state/<account id>.json` | PUUID のキャッシュ（Riot の API キーごとに暗号化された値なので、取得したキーのハッシュ `puuid_key_id` と一緒に保存し、キーが変わったら取得し直す。以前のキーの PUUID は `previous_puuids` に残す）、収集・投稿の進み具合（`last_collected_end` / `last_post_end` / `last_post_id`） |
+| `metrics/<account id>/<日付>.ndjson` | その日の試合の指標（1 行 1 試合）。`participant_id` で元データの中の自分を特定できる |
+| `state/<account id>.json` | 収集・投稿の進み具合（`last_collected_end` / `last_post_end` / `last_post_id`）。PUUID は API キーごとに暗号化された値なので保存せず、実行のたびに取得する |
 | `previews/<account id>/<日付>/` | `DRY_RUN` のときに作った投稿の本文と画像 |
 
 投稿の設定（`terraform/environments/prod/main.tf` の関数の環境変数）:

@@ -57,9 +57,3 @@ def test_match_and_timeline_paths():
         "https://asia.api.riotgames.com/lol/match/v5/matches/JP1_1",
         "https://asia.api.riotgames.com/lol/match/v5/matches/JP1_1/timeline",
     ]
-
-
-def test_key_id_identifies_the_key_without_revealing_it():
-    a, b = RiotClient("RGAPI-aaaa", Session()), RiotClient("RGAPI-aaaa", Session())
-    assert a.key_id == b.key_id != RiotClient("RGAPI-bbbb", Session()).key_id
-    assert "aaaa" not in a.key_id and len(a.key_id) == 12

@@ -3,9 +3,11 @@
 Layout (paths are derived, never listed):
   raw/matches/<match id>.json.gz       {"match": ..., "timeline": ...}, written once per match
   metrics/<account id>/<day>.ndjson    one record per game of that day (see period.day_of)
-  state/<account id>.json              puuid cache (per Riot ID and API key) and how far collection /
-                                       posting have got; previous_puuids keeps the PUUIDs earlier keys
-                                       returned, which identify the player in raw data stored back then
+  state/<account id>.json              how far collection / posting have got
+
+The PUUID is looked up on every run instead of being stored: PUUIDs are encrypted per API key,
+so a stored one stops working when the key changes. Records keep the player's participant_id,
+which identifies them in the raw data whatever key it was fetched with.
 """
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -13,6 +15,7 @@ from datetime import datetime
 from . import metrics, period
 
 SCHEMA_VERSION = 1
+OBSOLETE_STATE_KEYS = ("riot_id", "puuid", "puuid_key_id", "previous_puuids")  # from the old PUUID cache
 
 
 def raw_path(match_id):
@@ -65,20 +68,13 @@ def build_record(account_id, match_id, match, timeline, puuid):
 
 def collect(account, riot, bucket, now):
     state = bucket.read_json(state_path(account.id)) or {}
-    riot_id = f"{account.riot.game_name}#{account.riot.tag_line}"
-    cached = state.get("riot_id") == riot_id and state.get("puuid_key_id") == riot.key_id
-    puuid = state.get("puuid") if cached else None
-    puuid = puuid or riot.puuid(account.riot)
-    previous = list(state.get("previous_puuids", []))
-    if state.get("puuid") and state["puuid"] != puuid and state["puuid"] not in previous:
-        previous.append(state["puuid"])
-
     last = state.get("last_collected_end")
     start, end = period.collection_window(now, datetime.fromisoformat(last) if last else None)
     result = CollectResult(account.id, start.isoformat(), end.isoformat())
 
     by_day = {}
     if start < end:
+        puuid = riot.puuid(account.riot)
         ids = riot.match_ids(account.riot.region, puuid,
                              start_time=period.to_epoch_seconds(start) - period.MAX_GAME_SECONDS,
                              end_time=period.to_epoch_seconds(end))
@@ -102,8 +98,6 @@ def collect(account, riot, bucket, now):
         result.days.append(day)
 
     # Only advance after everything is stored, so a failed run is simply redone next time
-    bucket.write_json(state_path(account.id), {
-        **state, "riot_id": riot_id, "puuid": puuid, "puuid_key_id": riot.key_id,
-        **({"previous_puuids": previous} if previous else {}), "last_collected_end": end.isoformat(),
-    })
+    kept = {k: v for k, v in state.items() if k not in OBSOLETE_STATE_KEYS}
+    bucket.write_json(state_path(account.id), {**kept, "last_collected_end": end.isoformat()})
     return result

@@ -1,5 +1,4 @@
 """Riot Games API: account-v1 and match-v5."""
-import hashlib
 from urllib.parse import quote
 
 from .http import new_session, request
@@ -12,9 +11,6 @@ class RiotClient:
     def __init__(self, api_key, session=None, *, sleep=None):
         self._session = session or new_session()
         self._session.headers["X-Riot-Token"] = api_key
-        # PUUIDs are encrypted per API key (application), so a cached PUUID is only valid for the
-        # key it was fetched with. This short hash identifies the key without revealing it.
-        self.key_id = hashlib.sha256(api_key.encode()).hexdigest()[:12]
         self._request_kwargs = {"sleep": sleep} if sleep else {}
 
     def _get(self, region, path, params=None):
