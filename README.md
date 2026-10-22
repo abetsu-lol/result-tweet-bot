@@ -196,7 +196,7 @@ Riot の Development キーは 24 時間で失効するため、Development キ�
 | --- | --- |
 | `raw/matches/<match id>.json.gz` | 試合の詳細とタイムライン（gzip）。試合ごとに 1 回だけ書き込む |
 | `metrics/<account id>/<日付>.ndjson` | その日の試合の指標（1 行 1 試合） |
-| `state/<account id>.json` | PUUID のキャッシュ、収集・投稿の進み具合（`last_collected_end` / `last_post_end` / `last_post_id`） |
+| `state/<account id>.json` | PUUID のキャッシュ（Riot の API キーごとに暗号化された値なので、取得したキーのハッシュ `puuid_key_id` と一緒に保存し、キーが変わったら取得し直す。以前のキーの PUUID は `previous_puuids` に残す）、収集・投稿の進み具合（`last_collected_end` / `last_post_end` / `last_post_id`） |
 | `previews/<account id>/<日付>/` | `DRY_RUN` のときに作った投稿の本文と画像 |
 
 投稿の設定（`terraform/environments/prod/main.tf` の関数の環境変数）:

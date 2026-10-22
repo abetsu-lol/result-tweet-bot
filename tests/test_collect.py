@@ -124,7 +124,7 @@ def test_empty_window_calls_no_match_api():
     bucket = FakeBucket()
     end = datetime(2026, 10, 20, 12, tzinfo=JST)
     bucket.objects["state/main.json"] = {"last_collected_end": end.isoformat(), "puuid": "puuid-me",
-                                         "riot_id": "名前#JP1", "last_post_id": "9"}
+                                         "puuid_key_id": "key-1", "riot_id": "名前#JP1", "last_post_id": "9"}
 
     result = collect.collect(ACCOUNT, riot, bucket, datetime(2026, 10, 20, 18, 0, tzinfo=JST))
 
@@ -149,3 +149,26 @@ def test_end_time_falls_back_to_start_plus_duration_for_old_matches():
     match = f.match(end=datetime(2026, 10, 19, 20, 0, tzinfo=JST), duration=1800)
     del match["info"]["gameEndTimestamp"]
     assert collect.game_end(match["info"]) == datetime(2026, 10, 19, 20, 0, tzinfo=JST)
+
+
+def test_a_new_api_key_refetches_the_puuid_and_keeps_the_old_one():
+    # PUUIDs are encrypted per API key: the cached one fails with HTTP 400 after a key change
+    riot = riot_with({"JP1_1": (datetime(2026, 10, 19, 20, 0, tzinfo=JST), 1800)})
+    riot.key_id = "key-2"
+    bucket = FakeBucket()
+    bucket.objects["state/main.json"] = {"riot_id": "名前#JP1", "puuid": "puuid-old", "puuid_key_id": "key-1",
+                                         "last_collected_end": datetime(2026, 10, 19, 12, tzinfo=JST).isoformat()}
+
+    collect.collect(ACCOUNT, riot, bucket, NOW)
+
+    assert ("puuid", "名前") in riot.calls
+    state = bucket.objects["state/main.json"]
+    assert (state["puuid"], state["puuid_key_id"], state["previous_puuids"]) == ("puuid-me", "key-2", ["puuid-old"])
+
+
+def test_records_keep_the_participant_id():
+    riot = riot_with({"JP1_1": (datetime(2026, 10, 19, 20, 0, tzinfo=JST), 1800)})
+    bucket = FakeBucket()
+    bucket.objects["state/main.json"] = {"last_collected_end": datetime(2026, 10, 19, 12, tzinfo=JST).isoformat()}
+    collect.collect(ACCOUNT, riot, bucket, NOW)
+    assert bucket.objects["metrics/main/2026-10-19.ndjson"][0]["participant_id"] == 3
