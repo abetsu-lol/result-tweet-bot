@@ -1,5 +1,5 @@
 // Prerequisites for CI, applied from a local machine by a project admin (initial setup and rare changes):
-// Workload Identity Federation and the deployer service account that GitHub Actions impersonates.
+// Workload Identity Federation and the deployer / planner service accounts that GitHub Actions impersonates.
 // Kept out of the CI-applied environment so that CI cannot change its own credentials or project IAM.
 terraform {
   required_version = ">= 1.7"
@@ -30,6 +30,17 @@ module "github_actions_wif" {
     // editor cannot set IAM policies; needed for the Pub/Sub topic binding of Cloud Scheduler
     "roles/pubsub.admin",
   ]
+  planner_roles = [
+    "roles/viewer",
+    "roles/iam.securityReviewer"
+  ]
+}
+
+// Lets the planner read the environment state. It runs plan with -lock=false, so it needs no write access.
+resource "google_storage_bucket_iam_member" "planner_state_reader" {
+  bucket = var.tf_state_bucket
+  role   = "roles/storage.objectViewer"
+  member = "serviceAccount:${module.github_actions_wif.planner_service_account_email}"
 }
 
 // Project IAM needed to build the function; CI cannot grant it because the deployer has no IAM rights

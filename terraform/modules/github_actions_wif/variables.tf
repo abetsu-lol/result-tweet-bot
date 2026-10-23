@@ -4,7 +4,7 @@ variable "project" {
 }
 
 variable "name" {
-  description = "Prefix of the deployer service account id (<name>-deployer, at most 30 characters in total)"
+  description = "Prefix of the service account ids (<name>-deployer / <name>-planner, at most 30 characters in total)"
   type        = string
 }
 
@@ -14,12 +14,17 @@ variable "github_repository" {
 }
 
 variable "deploy_branch" {
-  description = "Branch whose GitHub Actions runs are allowed to authenticate via Workload Identity Federation"
+  description = "Branch whose GitHub Actions runs may impersonate the deployer; pull requests into it may impersonate the planner"
   type        = string
   default     = "main"
 }
 
 variable "deployer_roles" {
   description = "Project roles granted to the deployer service account"
+  type        = list(string)
+}
+
+variable "planner_roles" {
+  description = "Project roles granted to the read-only planner service account used by pull requests"
   type        = list(string)
 }

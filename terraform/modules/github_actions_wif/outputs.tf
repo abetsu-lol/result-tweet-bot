@@ -9,3 +9,7 @@ output "wif_provider" {
 output "deployer_service_account_email" {
   value = google_service_account.deployer.email
 }
+
+output "planner_service_account_email" {
+  value = google_service_account.planner.email
+}

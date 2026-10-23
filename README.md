@@ -64,7 +64,7 @@ Terraform の変数との対応:
 | --- | --- |
 | `environments/prod`: `project` / `region` | `GCP_PROJECT_ID` / `GCP_REGION` |
 | `environments/prod`: `riot_api_key` / `x_app_credentials` / `accounts` | Secrets（`TF_VAR_*`）。書き込み専用で Secret Manager に書き込まれ、plan と state には残らない |
-| `bootstrap/prod`: `project` / `github_repository` | ローカルでの apply 時に `-var` で指定 |
+| `bootstrap/prod`: `project` / `github_repository` / `tf_state_bucket` | ローカルでの apply 時に `-var` で指定 |
 | リソース名（`name`）・スケジュール・デプロイ用ブランチ・デプロイ用サービスアカウントのロールほか | 各ルートの `main.tf` のモジュール引数。変える場合は編集する |
 
 ## 自分の環境にデプロイする
@@ -96,9 +96,11 @@ cd terraform/bootstrap/prod
 terraform init -backend-config="bucket=YOUR_TF_STATE_BUCKET" -backend-config="prefix=terraform/bootstrap"
 terraform apply \
   -var="project=YOUR_PROJECT_ID" \
-  -var="github_repository=OWNER/REPO"     # このリポジトリ。GitHub 上の名前と完全に一致させる
+  -var="github_repository=OWNER/REPO" \   # このリポジトリ。GitHub 上の名前と完全に一致させる
+  -var="tf_state_bucket=YOUR_TF_STATE_BUCKET"
 terraform output -raw wif_provider; echo
 terraform output -raw deployer_service_account_email; echo
+terraform output -raw planner_service_account_email; echo
 ```
 
 ### 3. GitHub リポジトリの設定
@@ -168,7 +170,10 @@ Riot の Development キーは 24 時間で失効するため、Development キ�
 
 ## セキュリティ
 
-- Workload Identity Federation で、`github_repository` の `deploy_branch`（既定 `main`）で動くワークフローだけが認証できます。fork や Pull Request からは認証できません。
+- Workload Identity Federation で認証できるのは `github_repository` の、`deploy_branch`（既定 `main`）で動くワークフローと、`deploy_branch` 向けの Pull Request（`pull_request` イベント）のワークフローだけです。
+  - デプロイ用サービスアカウントを使えるのは `deploy_branch` の実行のみです。
+  - Pull Request が使えるのは `terraform plan` 用の読み取り専用サービスアカウント（`roles/viewer` と tfstate 用バケットの読み取りのみ）だけです。
+  - fork からの Pull Request には GitHub が OIDC トークンを発行しないため認証できません。`pull_request_target` も拒否します。
 - ワークフローは `pull_request` では実行せず、Environment `prod` は `main` ブランチからのみ使用できます。
 - デプロイ用サービスアカウントのロールは `roles/editor` と `roles/pubsub.admin`（Cloud Scheduler が topic に publish するための権限付与に必要）のみです。プロジェクトの IAM や WIF は変更できません。
 - Secret Manager の Secret に対して、デプロイ用サービスアカウントはバージョンの追加・破棄のみ、関数の実行用サービスアカウントは読み取りのみ可能です。
