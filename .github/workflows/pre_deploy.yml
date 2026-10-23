@@ -1,7 +1,7 @@
 name: Pre-deploy checks
 
-# Runs on pull requests to main: function tests, and Terraform fmt / validate for every directory.
-# terraform/environments/prod is also planned once the read-only plan setup is ready.
+# Runs on pull requests to main: function tests, Terraform fmt for every directory, validate for the
+# root modules (which also validates the modules they call), and a read-only plan of environments/prod.
 #
 # Repository variables for the plan: GCP_PROJECT_ID, GCP_REGION, TF_STATE_BUCKET,
 #                                    GCP_WORKLOAD_PROVIDER, GCP_PLAN_SA_EMAIL
@@ -58,34 +58,41 @@ jobs:
 
     - name: Format check
       working-directory: terraform/
-      run: terraform fmt -check 
+      run: terraform fmt -check -recursive
 
     - name: Validate Environment prod
       working-directory: terraform/environments/prod
       run: |
         terraform init -backend=false -input=false
-        terraform validate -no-color -recursive
+        terraform validate -no-color
 
     - name: Validate Bootstrap prod
       working-directory: terraform/bootstrap/prod
       run: |
         terraform init -backend=false -input=false
-        terraform validate -no-color  
+        terraform validate -no-color
 
     - name: Authenticate to GCP using Workload Identity
-      if: matrix.dir == 'terraform/environments/prod'
       uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
       with:
         workload_identity_provider: ${{ vars.GCP_WORKLOAD_PROVIDER }}
         service_account: ${{ vars.GCP_PLAN_SA_EMAIL }}
 
+    # The provider compares the zip's MD5 with the uploaded object; without it the plan always shows a diff
+    - name: Package Cloud Function
+      run: ./scripts/package_function.sh
+
     - name: terraform plan Environments prod
-      if: matrix.dir == 'terraform/environments/prod'
-      working-directory: ${{ matrix.dir }}
+      working-directory: terraform/environments/prod
       env:
         TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
         GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
         GCP_REGION: ${{ vars.GCP_REGION }}
+        # Dummy secret values: the provider requires them at plan time, but they are write-only and
+        # never compared, so the plan shows no diff and nothing is written (apply runs only from main)
+        TF_VAR_riot_api_key: dummy
+        TF_VAR_x_app_credentials: '{"consumer_key":"dummy","consumer_secret":"dummy"}'
+        TF_VAR_accounts: '[]'
       # -lock=false: the plan service account is read-only and cannot take the state lock
       run: |
         terraform init -reconfigure -input=false \
