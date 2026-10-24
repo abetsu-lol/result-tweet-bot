@@ -1,0 +1,103 @@
+name: Pre-deploy checks
+
+# Runs on pull requests to main: function tests, Terraform fmt for every directory, validate for the
+# root modules (which also validates the modules they call), and a read-only plan of environments/prod.
+#
+# Repository variables for the plan: GCP_PROJECT_ID, GCP_REGION, TF_STATE_BUCKET,
+#                                    GCP_WORKLOAD_PROVIDER, GCP_PLAN_SA_EMAIL
+
+on:
+  pull_request:
+    branches: [ main ]
+
+permissions:
+  contents: read
+
+jobs:
+  test_function:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+    - name: Setup Python
+      uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+      with:
+        # Same version as the python312 runtime of the function
+        python-version: "3.12"
+        cache: pip
+        cache-dependency-path: |
+          requirements-dev.txt
+          cloud_function/requirements.txt
+
+    - name: Install dependencies
+      run: pip install -r requirements-dev.txt
+
+    - name: Test
+      run: pytest
+
+  terraform_check:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+
+    - name: Format check
+      working-directory: terraform/
+      run: terraform fmt -check -recursive
+
+    - name: Validate Environment prod
+      working-directory: terraform/environments/prod
+      run: |
+        terraform init -backend=false -input=false
+        terraform validate -no-color
+
+    - name: Validate Bootstrap prod
+      working-directory: terraform/bootstrap/prod
+      run: |
+        terraform init -backend=false -input=false
+        terraform validate -no-color
+
+    - name: Authenticate to GCP using Workload Identity
+      uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
+      with:
+        workload_identity_provider: ${{ vars.GCP_WORKLOAD_PROVIDER }}
+        service_account: ${{ vars.GCP_PLAN_SA_EMAIL }}
+
+    # The provider compares the zip's MD5 with the uploaded object; without it the plan always shows a diff
+    - name: Package Cloud Function
+      run: ./scripts/package_function.sh
+
+    - name: terraform plan Environments prod
+      working-directory: terraform/environments/prod
+      env:
+        TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
+        GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+        GCP_REGION: ${{ vars.GCP_REGION }}
+        # Dummy secret values: the provider requires them at plan time, but they are write-only and
+        # never compared, so the plan shows no diff and nothing is written (apply runs only from main)
+        TF_VAR_riot_api_key: dummy
+        TF_VAR_x_app_credentials: '{"consumer_key":"dummy","consumer_secret":"dummy"}'
+        TF_VAR_accounts: '[]'
+      # -lock=false: the plan service account is read-only and cannot take the state lock
+      run: |
+        terraform init -reconfigure -input=false \
+          -backend-config="bucket=$TF_STATE_BUCKET" \
+          -backend-config="prefix=terraform/state"
+        terraform plan -lock=false -input=false -no-color \
+          -var="project=$GCP_PROJECT_ID" \
+          -var="region=$GCP_REGION"

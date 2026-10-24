@@ -13,17 +13,51 @@ on:
   workflow_dispatch: {}
 
 permissions:
-  contents: read
+  contents: write
+  pull-requests: write
+  issues: write 
   id-token: write
 
 concurrency:
   group: deploy
   cancel-in-progress: false
 
+# version / release の両ジョブで同じバージョンを使うためにここで固定する
+# （with の値なので Dependabot では更新されない。上げるときは手で書き換える）
+env:
+  SEMANTIC_RELEASE_VERSION: 25.0.9
+  CONVENTIONALCOMMITS_VERSION: 10.4.1
+
 jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      published: ${{ steps.semantic.outputs.new_release_published }}
+      version: ${{ steps.semantic.outputs.new_release_version }}
+      tag: ${{ steps.semantic.outputs.new_release_git_tag }}
+    steps:
+      # 過去のタグとコミット履歴をすべて読むため fetch-depth: 0 が必要
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+ 
+      # 次のバージョンを計算するだけで、タグや Release は作らない
+      - uses: cycjimmy/semantic-release-action@d9bf53a078bd2f86aaffaec796dbb3d28f1b6f34 # v8.1.3
+        id: semantic
+        with:
+          dry_run: true
+          semantic_version: ${{ env.SEMANTIC_RELEASE_VERSION }}
+          extra_plugins: |
+            conventional-changelog-conventionalcommits@${{ env.CONVENTIONALCOMMITS_VERSION }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+
   deploy:
     # Skip in repositories (e.g. fresh forks) that have not been set up for deployment.
     # This must be a repository variable: environment variables are not available in a job-level `if`.
+    needs: version
     if: vars.DEPLOY_ENABLED == 'true'
     environment: prod
     runs-on: ubuntu-latest
@@ -64,3 +98,39 @@ jobs:
         terraform apply -auto-approve -input=false \
           -var="project=${{ vars.GCP_PROJECT_ID }}" \
           -var="region=${{ vars.GCP_REGION }}"
+        
+  release:
+    needs: [version, deploy]
+    # deploy が成功したときだけ実行される（失敗・スキップ時は実行されない）
+    runs-on: ubuntu-latest
+    steps:
+      # デプロイしたのと同じコミット（github.sha）をチェックアウトし、そこにタグを付ける
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1      
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+ 
+      # ここで初めてタグと GitHub Release が作られる
+      - uses: cycjimmy/semantic-release-action@d9bf53a078bd2f86aaffaec796dbb3d28f1b6f34 # v8.1.3
+        id: semantic
+        with:
+          semantic_version: ${{ env.SEMANTIC_RELEASE_VERSION }}
+          extra_plugins: |
+            conventional-changelog-conventionalcommits@${{ env.CONVENTIONALCOMMITS_VERSION }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+ 
+      # 念のため、デプロイしたバージョンと実際に作られたバージョンが一致しているか確認する
+      - name: Verify released version
+        env:
+          EXPECTED: ${{ needs.version.outputs.version }}
+          ACTUAL: ${{ steps.semantic.outputs.new_release_version }}
+        run: |
+          # 実行中に main へ次の push が入ると semantic-release はリリースを見送る(ACTUAL が空になる）
+          # その場合は次の実行がまとめてリリースするので、失敗ではなく警告にする
+          if [ -n "${EXPECTED}" ] && [ -z "${ACTUAL}" ]; then
+            echo "::warning::main が先に進んだため ${EXPECTED} のリリースを見送りました（次の実行でリリースされます）"
+          elif [ "${EXPECTED}" != "${ACTUAL}" ]; then
+            echo "::error::デプロイしたバージョン (${EXPECTED}) とリリースされたバージョン (${ACTUAL}) が一致しません"
+            exit 1
+          fi
