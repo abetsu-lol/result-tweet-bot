@@ -7,11 +7,11 @@ League of Legends の指定したアカウントのランク戦（ソロ / デ�
 ```
 cloud_function/   アプリ本体（エントリポイント: daily_job(event, context)）
 terraform/
-  bootstrap/prod/     CI の前提となるリソース（WIF・デプロイ用 / 関数の実行用サービスアカウント・ビルドの権限・Secret の器・戦績データ用バケット）。ローカルから apply
+  bootstrap/prod/     CI の前提となるリソース（WIF・デプロイ用 / plan 用 / 関数の実行用サービスアカウント・ビルドの権限・Secret の器・戦績データ用バケット）。ローカルから apply
   environments/prod/  アプリのリソース（Cloud Function・Pub/Sub・Cloud Scheduler・イメージ用 Artifact Registry・Secret の値）。CI から apply
   modules/scheduled_function/  Cloud Function + Pub/Sub + Cloud Scheduler + イメージ用 Artifact Registry（最新 2 件のみ保持）
   modules/secret_versions/     Secret Manager の Secret の値（書き込み専用。plan と state に残らない）
-  modules/github_actions_wif/  GitHub Actions 用 Workload Identity Federation とデプロイ用サービスアカウント
+  modules/github_actions_wif/  GitHub Actions 用 Workload Identity Federation とデプロイ用 / plan 用サービスアカウント
   modules/function_build_iam/  関数のビルドに Cloud Build が使うサービスアカウント（Compute Engine のデフォルト SA）の権限
   modules/function_runtime/    関数の実行用サービスアカウント・Secret Manager の Secret（器のみ）・戦績データ用バケットと権限
 scripts/
@@ -21,7 +21,9 @@ scripts/
   build_font.py        画像用の日本語フォント（使う文字だけに絞ったもの）を作る
 secrets.example/  set_secrets.sh で使う、値を記入するファイルのテンプレート
 tests/            テスト（pytest）
-.github/workflows/deploy.yml  main への push で terraform/environments/prod を apply
+.github/workflows/deploy.yml      main への push で terraform/environments/prod を apply し、成功したらタグと Release を作る
+.github/workflows/pre_deploy.yml  main 向けの Pull Request でテストと Terraform の fmt / validate / plan を実行
+.releaserc.json                   semantic-release の設定（リリースとバージョン）
 ```
 
 コードには特定の環境の値（プロジェクト ID・バケット名など）を含めていません。値はすべて GitHub リポジトリの設定から渡します。
@@ -33,7 +35,7 @@ fork（または clone して自分のリポジトリに push）し、以下の�
 | | 内容 | apply する場所 | state（tfstate 用バケット内の prefix） |
 | --- | --- | --- | --- |
 | tfstate 用バケット | `scripts/bootstrap.sh`（gcloud） | ローカル | — |
-| `terraform/bootstrap/prod` | WIF プール / プロバイダ、デプロイ用サービスアカウントとその権限、関数のビルドに使うサービスアカウントの権限、関数の実行用サービスアカウント・Secret・戦績データ用バケット | ローカル（初回とまれな変更のみ） | `terraform/bootstrap` |
+| `terraform/bootstrap/prod` | WIF プール / プロバイダ、デプロイ用 / plan 用サービスアカウントとその権限、関数のビルドに使うサービスアカウントの権限、関数の実行用サービスアカウント・Secret・戦績データ用バケット | ローカル（初回とまれな変更のみ） | `terraform/bootstrap` |
 | `terraform/environments/prod` | Cloud Function・Pub/Sub・Cloud Scheduler・イメージ用 Artifact Registry・Secret の値 | CI | `terraform/state` |
 
 CI の認証情報と IAM は CI の管理対象外にしているため、デプロイ用サービスアカウントにはプロジェクトの IAM を変更する権限がありません。
@@ -57,6 +59,8 @@ Environment `prod` を作成し、Deployment branches を `main` のみに制限
 | Environment `prod` の Secret | `RIOT_API_KEY` | Riot Games の API キー | [Secret の登録と更新](#secret-の登録と更新) |
 | Environment `prod` の Secret | `X_APP_CREDENTIALS` | X アプリの Consumer Key / Secret（JSON） | 同上 |
 | Environment `prod` の Secret | `ACCOUNTS` | 対象の Riot アカウントと X アカウントのセットの配列（JSON） | 同上 |
+| リポジトリの Variable | `GCP_PROJECT_ID` / `GCP_REGION` / `TF_STATE_BUCKET` / `GCP_WORKLOAD_PROVIDER` | Environment `prod` と同じ値 | Pull Request の plan（`pre_deploy.yml`）が参照する。Pull Request の実行は Environment `prod` を使えないため、リポジトリにも置く |
+| リポジトリの Variable | `GCP_PLAN_SA_EMAIL` | plan 用サービスアカウントのメールアドレス | `terraform/bootstrap/prod` の `terraform output -raw planner_service_account_email` |
 
 Terraform の変数との対応:
 
@@ -86,7 +90,7 @@ state の過去の版はバージョニングで保持され、古い版（新�
 
 ### 2. CI の前提となるリソースを作成（ローカル・初回とまれな変更のみ）
 
-WIF、デプロイ用 / 関数の実行用サービスアカウント、ビルドの権限、Secret の器、戦績データ用バケットを作成します。
+WIF、デプロイ用 / plan 用 / 関数の実行用サービスアカウント、ビルドの権限、Secret の器、戦績データ用バケットを作成します。
 
 値はファイルに保存せず、引数で渡します。
 
@@ -114,6 +118,32 @@ fork の場合は Actions タブからワークフローを有効にしてくだ
 初回のアプリのリソース作成も CI で行われます（Actions タブの Deploy から手動実行も可能）。
 ソースが変わると GCS 上のオブジェクト名（内容ハッシュ）が変わり、関数が再デプロイされます。
 `environments/prod` の変更も同様に push で反映し、ローカルからの plan / apply は行いません。
+デプロイが成功すると、そのコミットにバージョンのタグが付きます（[リリースとバージョン](#リリースとバージョン)）。
+
+## リリースとバージョン
+
+[semantic-release](https://semantic-release.gitbook.io/) が `main` のコミットメッセージからバージョンを決め、デプロイしたコミットにタグ（`vX.Y.Z`）と GitHub Release を作ります。
+バージョンの正はタグで、`pyproject.toml` の `version` は使いません。
+
+| コミットの種類（[Conventional Commits](https://www.conventionalcommits.org/ja/)） | バージョン |
+| --- | --- |
+| `feat!:` など `!` 付き、または本文に `BREAKING CHANGE:` | メジャー（1.0.0 → 2.0.0） |
+| `feat:` | マイナー（1.0.0 → 1.1.0） |
+| `fix:` / `perf:` | パッチ（1.0.0 → 1.0.1） |
+| それ以外（`ci:` / `chore:` / `docs:` / `refactor:` / `test:` など） | リリースしない（デプロイはする） |
+
+- Pull Request は squash merge するため、**PR のタイトル**（コミットが 1 つの PR ではそのコミットのメッセージ）を上の形式にします。
+- 最初のリリースは `v1.0.0` です。
+- `deploy.yml` は次の 3 つのジョブで動きます。デプロイに失敗したコミットにはタグが付きません。
+
+  | ジョブ | 内容 |
+  | --- | --- |
+  | `version` | 次のバージョンを計算する（dry-run。タグは作らない） |
+  | `deploy` | `version` が成功したら `terraform apply` する |
+  | `release` | `deploy` が成功したら、そのコミットにタグと Release を作り、`version` で計算したバージョンと一致するかを確認する |
+
+- 実行中に `main` へ次の push が入ると、`release` はリリースを見送り（警告のみ）、次の実行がまとめてリリースします。
+- 設定は `.releaserc.json` にあります。semantic-release と conventionalcommits プリセットのバージョンは `deploy.yml` の `env` で固定しています。Dependabot では更新されないため、手で上げます。
 
 ## Secret の登録と更新
 
@@ -140,7 +170,7 @@ Terraform は値の変化を比べられないので、**値を変えたら `ter
    ./scripts/set_secrets.sh           # 3 つとも登録（1 つだけなら名前を指定）
    ```
 
-3. `module "secret_versions"` の番号を上げる PR を出してマージする（初回は 1 のままでよい）
+3. `module "secret_versions"` の番号を上げる PR を出してマージする（初回は番号を変えなくてよい）
 
 Personal / Production キーは失効しないため、上の手順（番号を上げる PR）で更新します。
 Riot の Development キーは 24 時間で失効するため、Development キーで開発している間は毎日次を実行して更新します。GitHub Secret と同時に Secret Manager にも直接書き込むので、PR は不要です（関数は常に最新のバージョンを読む）。
@@ -164,15 +194,15 @@ Riot の Development キーは 24 時間で失効するため、Development キ�
 - ACCOUNT-V1 / MATCH-V5 はアカウントのサーバー（`platform`）から決まる地域（日本は `asia`）、LEAGUE-V4 はサーバー（日本は `jp1`）にルーティングします。
 - 1 アカウントあたりの呼び出しは、1 日に「約 2 × 試合数 + 3 回」です（1 日 10 試合なら約 23 回）。Development / Personal キーのレート制限（20 回 / 秒、100 回 / 2 分）の範囲に収まります。
 - 429（レート制限）は `Retry-After` に従って待ってから再試行し、5xx は間隔を空けて再試行します。
-- すべてのリクエストに `User-Agent: result-tweet-bot/<version>` を付けます。
+- すべてのリクエストに `User-Agent: result-tweet-bot/0.1 (+<リポジトリの URL>)` を付けます（`bot/http.py` の固定値。リリースのタグとは連動しない）。
 - API キーは Secret Manager に保存し、実行時に読み込みます（コードやログには含めない）。
 - チャンピオンの日本語名とアイコンは Data Dragon（`ddragon.leagueoflegends.com`、API キー不要）から取得します。
 
 ## セキュリティ
 
-- Workload Identity Federation で認証できるのは `github_repository` の、`deploy_branch`（既定 `main`）で動くワークフローと、`deploy_branch` 向けの Pull Request（`pull_request` イベント）のワークフローだけです。
-  - デプロイ用サービスアカウントを使えるのは `deploy_branch` の実行のみです。
-  - Pull Request が使えるのは `terraform plan` 用の読み取り専用サービスアカウント（`roles/viewer` と tfstate 用バケットの読み取りのみ）だけです。
+- Workload Identity Federation で認証できるのは `github_repository` のワークフローだけで、使えるサービスアカウントは実行の種類で分かれます。
+  - デプロイ用サービスアカウントを使えるのは `deploy_branch`（既定 `main`）で動く実行のみです。
+  - Pull Request（`pull_request` イベント）の実行が使えるのは、`terraform plan` 用の読み取り専用サービスアカウント（`roles/viewer` と tfstate 用バケットの読み取りのみ）だけです。WIF 側ではマージ先のブランチを制限しておらず、`main` 向けに限っているのはワークフロー（`pre_deploy.yml`）のトリガーです。
   - fork からの Pull Request には GitHub が OIDC トークンを発行しないため認証できません。`pull_request_target` も拒否します。
 - ワークフローは `pull_request` では実行せず、Environment `prod` は `main` ブランチからのみ使用できます。
 - デプロイ用サービスアカウントのロールは `roles/editor` と `roles/pubsub.admin`（Cloud Scheduler が topic に publish するための権限付与に必要）のみです。プロジェクトの IAM や WIF は変更できません。
@@ -202,7 +232,7 @@ Riot の Development キーは 24 時間で失効するため、Development キ�
 | --- | --- |
 | `raw/matches/<match id>.json.gz` | 試合の詳細とタイムライン（gzip）。試合ごとに 1 回だけ書き込む |
 | `metrics/<account id>/<日付>.ndjson` | その日の試合の指標（1 行 1 試合）。`participant_id` で元データの中の自分を特定できる |
-| `ranks/<account id>/<日付>.json` | その日の 12:00 の区切りの直後に取得したソロ / デュオのランク（投稿の本文に表示）。取得に失敗した日はなく、本文のランクの行が省かれる |
+| `ranks/<account id>/<日付>.json` | その日の 12:00 の区切りの直後に取得したソロ / デュオのランク（投稿の本文に表示）。取得に失敗した日はファイルがなく、本文のランクの行が省かれる |
 | `state/<account id>.json` | 収集・投稿の進み具合（`last_collected_end` / `last_post_end` / `last_post_id`）。PUUID は API キーごとに暗号化された値なので保存せず、実行のたびに取得する |
 | `previews/<account id>/<日付>/` | `DRY_RUN` のときに作った投稿の本文と画像 |
 
@@ -228,6 +258,7 @@ python -m venv .venv
 ```
 
 Riot API・GCS・Secret Manager は偽物に差し替えて実行します（通信しない）。
+`main` 向けの Pull Request では、`pre_deploy.yml` が pytest と Terraform の fmt / validate / plan（`environments/prod`、plan 用サービスアカウントで `-lock=false`）を実行します。
 
 依存ライブラリは `==` で固定し（デプロイのたびに中身が変わらないようにするため）、固定した時点の最新版を選んでいます。以後の更新は Dependabot の PR で行います。
 
