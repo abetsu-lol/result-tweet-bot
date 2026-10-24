@@ -123,7 +123,6 @@ fork の場合は Actions タブからワークフローを有効にしてくだ
 ## リリースとバージョン
 
 [semantic-release](https://semantic-release.gitbook.io/) が `main` のコミットメッセージからバージョンを決め、デプロイしたコミットにタグ（`vX.Y.Z`）と GitHub Release を作ります。
-バージョンの正はタグで、`pyproject.toml` の `version` は使いません。
 
 | コミットの種類（[Conventional Commits](https://www.conventionalcommits.org/ja/)） | バージョン |
 | --- | --- |

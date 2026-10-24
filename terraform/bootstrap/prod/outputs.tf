@@ -8,7 +8,6 @@ output "deployer_service_account_email" {
   value = module.github_actions_wif.deployer_service_account_email
 }
 
-
 output "runtime_service_account_email" {
   value = module.function_runtime.runtime_service_account_email
 }

@@ -28,3 +28,8 @@ variable "planner_roles" {
   description = "Project roles granted to the read-only planner service account used by pull requests"
   type        = list(string)
 }
+
+variable "tf_state_bucket" {
+  description = "Name of the GCS bucket holding the environment's tfstate; the planner service account gets read-only access to it"
+  type        = string
+}

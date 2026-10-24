@@ -75,7 +75,6 @@ resource "google_service_account" "deployer" {
 }
 
 resource "google_project_iam_member" "deployer_roles" {
-
   for_each = toset(var.deployer_roles)
 
   project = var.project
@@ -105,6 +104,13 @@ resource "google_service_account" "planner" {
   display_name = "Validater for ${var.github_repository} (GitHub Actions via WIF)"
 }
 
+// Lets the planner read the environment state. It runs plan with -lock=false, so it needs no write access.
+resource "google_storage_bucket_iam_member" "planner_state_reader" {
+  bucket = var.tf_state_bucket
+  role   = "roles/storage.objectViewer"
+  member = "serviceAccount:${google_service_account.planner.email}"
+}
+
 resource "google_project_iam_member" "planner_roles" {
   for_each = toset(var.planner_roles)
 
@@ -113,7 +119,7 @@ resource "google_project_iam_member" "planner_roles" {
   member  = "serviceAccount:${google_service_account.planner.email}"
 }
 
-resource "google_service_account_iam_member" "plan_github_acitons" {
+resource "google_service_account_iam_member" "plan_github_actions" {
   service_account_id = google_service_account.planner.name
   role               = "roles/iam.workloadIdentityUser"
   // Matched by event rather than by subject, whose format depends on the repository's OIDC settings
@@ -126,7 +132,3 @@ resource "google_service_account_iam_member" "plan_github_acitons" {
 }
 
 
-moved {
-  from = google_service_account_iam_member.github_actions
-  to   = google_service_account_iam_member.deploy_github_actions
-}
