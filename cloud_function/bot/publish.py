@@ -70,8 +70,8 @@ def paginate(rows):
     return [rows[i:i + size] for i in range(0, len(rows), size)]
 
 
-def build_posts(settings, records, champions, label, rank_snapshot=None):
-    summary = text.summary(label, records, rank_snapshot)
+def build_posts(settings, records, champions, label, rank_snapshot=None, start_rank_snapshot=None):
+    summary = text.summary(label, records, rank_snapshot, start_rank_snapshot)
     rows = aggregate.by_champion(records) if settings.post_layout == "summary" else records
 
     if settings.post_format == "text":
@@ -117,7 +117,9 @@ def publish(account, settings, bucket, champions, x_client_factory, now):
     result.games = len(records)
     if records:
         label = text.period_label(period.day_of(start), period.day_of(end - timedelta(microseconds=1)))
-        posts = build_posts(settings, records, champions, label, bucket.read_json(rank_path(account.id, end)))
+        # Ranks saved right after the period's start and end boundaries show its LP change
+        posts = build_posts(settings, records, champions, label, bucket.read_json(rank_path(account.id, end)),
+                            bucket.read_json(rank_path(account.id, start)))
         result.posts = len(posts)
         if settings.dry_run:
             result.status = "previewed"

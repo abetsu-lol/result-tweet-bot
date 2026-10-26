@@ -1,3 +1,5 @@
+import pytest
+
 from bot import text
 from fakes import FakeChampions
 
@@ -56,3 +58,34 @@ def test_summary_ends_with_the_rank_when_known():
     snapshot = {"solo_duo": {"tier": "DIAMOND", "rank": "IV", "league_points": 0, "wins": 1, "losses": 1}}
     assert text.summary("10/19", [record()], snapshot).splitlines()[-1] == "ランク: ダイヤモンド IV 0LP"
     assert len(text.summary("10/19", [record()]).splitlines()) == 2
+
+
+def rank(tier, division, lp):
+    return {"tier": tier, "rank": division, "league_points": lp, "wins": 1, "losses": 1}
+
+
+@pytest.mark.parametrize("start,end,change", [
+    (rank("GOLD", "II", 45), rank("GOLD", "I", 4), 59),          # across a division
+    (rank("SILVER", "I", 90), rank("GOLD", "IV", 10), 20),       # across a tier
+    (rank("GOLD", "IV", 10), rank("SILVER", "I", 90), -20),      # demotion
+    (rank("DIAMOND", "I", 80), rank("MASTER", "I", 30), 50),     # into the apex tiers
+    (rank("MASTER", "I", 450), rank("GRANDMASTER", "I", 470), 20),  # apex LP keeps counting
+])
+def test_ladder_points_make_ranks_comparable(start, end, change):
+    assert text.ladder_points(end) - text.ladder_points(start) == change
+
+
+def test_rank_line_with_start_shows_the_change():
+    start, end = {"solo_duo": rank("GOLD", "II", 45)}, {"solo_duo": rank("GOLD", "I", 4)}
+    assert text.rank_line(end, start) == "ランク: ゴールド II 45LP → ゴールド I 4LP（+59LP）"
+    assert text.rank_line(end, end) == "ランク: ゴールド I 4LP → ゴールド I 4LP（±0LP）"
+    assert text.rank_line({"solo_duo": rank("GOLD", "II", 30)}, start) == \
+        "ランク: ゴールド II 45LP → ゴールド II 30LP（-15LP）"
+
+
+def test_rank_line_without_comparable_ranks():
+    end = {"solo_duo": rank("GOLD", "IV", 10)}
+    assert text.rank_line(end) == "ランク: ゴールド IV 10LP"                               # no start stored
+    assert text.rank_line(end, {"solo_duo": None}) == "ランク: なし → ゴールド IV 10LP"      # placed this period
+    assert text.rank_line({"solo_duo": None}, {"solo_duo": None}) == "ランク: なし → なし"
+    assert text.rank_line(None, end) is None                                               # no end stored

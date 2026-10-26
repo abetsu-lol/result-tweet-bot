@@ -221,3 +221,13 @@ def test_post_without_a_stored_rank_has_no_rank_line():
     bucket = bucket_with([game("JP1_1", datetime(2026, 10, 19, 20, tzinfo=JST))])
     _, x = run(bucket, DRY_RUN="false")
     assert "ランク:" not in x.posts[0]["text"]
+
+
+def test_post_text_shows_the_rank_change_over_the_period():
+    bucket = bucket_with([game("JP1_1", datetime(2026, 10, 19, 20, tzinfo=JST))])
+    bucket.objects["ranks/main/2026-10-19.json"] = {"solo_duo": {"tier": "GOLD", "rank": "II", "league_points": 45,
+                                                                 "wins": 1, "losses": 1}}
+    bucket.objects["ranks/main/2026-10-20.json"] = {"solo_duo": {"tier": "GOLD", "rank": "I", "league_points": 4,
+                                                                 "wins": 2, "losses": 1}}
+    _, x = run(bucket, DRY_RUN="false")
+    assert x.posts[0]["text"].splitlines()[-1] == "ランク: ゴールド II 45LP → ゴールド I 4LP（+59LP）"
