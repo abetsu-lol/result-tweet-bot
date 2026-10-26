@@ -197,7 +197,7 @@ Riot の Development キーは 24 時間で失効するため、Development キ�
 | --- | --- |
 | `raw/matches/<match id>.json.gz` | 試合の詳細とタイムライン（gzip）。試合ごとに 1 回だけ書き込む |
 | `metrics/<account id>/<日付>.ndjson` | その日の試合の指標（1 行 1 試合）。`participant_id` で元データの中の自分を特定できる |
-| `ranks/<account id>/<日付>.json` | その日の 12:00 の区切りの直後に取得したソロ / デュオのランク（投稿の本文に表示）。取得に失敗した日はなく、本文のランクの行が省かれる |
+| `ranks/<account id>/<日付>.json` | その日の 12:00 の区切りの直後に取得したソロ / デュオのランク。投稿の本文に、期間の開始と終了の区切りのランクと LP の増減を表示する（例: `ランク: ゴールド II 45LP → ゴールド I 4LP（+59LP）`。開始時のランクがない日は終了時のみ、終了時のランクがない日はランクの行を省く） |
 | `state/<account id>.json` | 収集・投稿の進み具合（`last_collected_end` / `last_post_end` / `last_post_id`）。PUUID は API キーごとに暗号化された値なので保存せず、実行のたびに取得する |
 | `previews/<account id>/<日付>/` | `DRY_RUN` のときに作った投稿の本文と画像 |
 
