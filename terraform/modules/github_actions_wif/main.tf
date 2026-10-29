@@ -97,7 +97,6 @@ resource "google_service_account_iam_member" "deploy_github_actions" {
 }
 
 // service account for Github Actions contain teraffrom code validation and python code test
-
 resource "google_service_account" "planner" {
   project      = var.project
   account_id   = "${var.name}-planner"
@@ -130,5 +129,3 @@ resource "google_service_account_iam_member" "plan_github_actions" {
 
   depends_on = [google_iam_workload_identity_pool_provider.github]
 }
-
-
