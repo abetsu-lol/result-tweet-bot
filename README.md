@@ -46,28 +46,33 @@ CI の認証情報と IAM は CI の管理対象外にしているため、デ�
 リポジトリ内に環境ごとの設定ファイル（tfvars など）はありません。
 機密ではない値は Variables（公開リポジトリでは Actions のログに値が表示されます）、API キーなどは Secrets に置きます。
 
-Environment `prod` を作成し、Deployment branches を `main` のみに制限したうえで、以下を設定します。
+Environment `prod` を作成し、Deployment branches を `main` のみに制限します。
+apply の前に plan を確認して承認する場合は、Required reviewers に承認する人を追加します（設定しなければ承認なしで apply されます）。
+そのうえで、以下を設定します。
 
 | 置き場所 | 名前 | 値 | 取得元 |
 | --- | --- | --- | --- |
 | リポジトリの Variable | `DEPLOY_ENABLED` | `true` | 未設定のリポジトリではデプロイジョブはスキップされる。ジョブの `if` で参照するため Environment ではなくリポジトリに置く |
-| Environment `prod` の Variable | `GCP_PROJECT_ID` | GCP プロジェクト ID | |
-| Environment `prod` の Variable | `GCP_REGION` | リージョン（例: `asia-northeast1`） | |
-| Environment `prod` の Variable | `TF_STATE_BUCKET` | tfstate 用バケット名 | `scripts/bootstrap.sh` の出力 |
-| Environment `prod` の Variable | `GCP_WORKLOAD_PROVIDER` | WIF プロバイダのフルリソース名 | `terraform/bootstrap/prod` の `terraform output -raw wif_provider` |
-| Environment `prod` の Variable | `GCP_SA_EMAIL` | デプロイ用サービスアカウントのメールアドレス | `terraform/bootstrap/prod` の `terraform output -raw deployer_service_account_email` |
+| リポジトリの Variable | `GCP_PROJECT_ID` | GCP プロジェクト ID | |
+| リポジトリの Variable | `GCP_REGION` | リージョン（例: `asia-northeast1`） | |
+| リポジトリの Variable | `TF_STATE_BUCKET` | tfstate 用バケット名 | `scripts/bootstrap.sh` の出力 |
+| リポジトリの Variable | `GCP_WORKLOAD_PROVIDER` | WIF プロバイダのフルリソース名 | `terraform/bootstrap/prod` の `terraform output -raw wif_provider` |
+| リポジトリの Variable | `GCP_SA_EMAIL` | デプロイ用サービスアカウントのメールアドレス | `terraform/bootstrap/prod` の `terraform output -raw deployer_service_account_email` |
+| リポジトリの Variable | `GCP_PLAN_SA_EMAIL` | plan 用サービスアカウントのメールアドレス | `terraform/bootstrap/prod` の `terraform output -raw planner_service_account_email` |
 | Environment `prod` の Secret | `RIOT_API_KEY` | Riot Games の API キー | [Secret の登録と更新](#secret-の登録と更新) |
 | Environment `prod` の Secret | `X_APP_CREDENTIALS` | X アプリの Consumer Key / Secret（JSON） | 同上 |
 | Environment `prod` の Secret | `ACCOUNTS` | 対象の Riot アカウントと X アカウントのセットの配列（JSON） | 同上 |
-| リポジトリの Variable | `GCP_PROJECT_ID` / `GCP_REGION` / `TF_STATE_BUCKET` / `GCP_WORKLOAD_PROVIDER` | Environment `prod` と同じ値 | Pull Request の plan（`pre_deploy.yml`）が参照する。Pull Request の実行は Environment `prod` を使えないため、リポジトリにも置く |
-| リポジトリの Variable | `GCP_PLAN_SA_EMAIL` | plan 用サービスアカウントのメールアドレス | `terraform/bootstrap/prod` の `terraform output -raw planner_service_account_email` |
+
+plan（Pull Request と `deploy.yml` の `plan` ジョブ）は Environment を使わずに、リポジトリの Variables で動きます（Pull Request は plan 用サービスアカウント、`deploy.yml` はデプロイ用サービスアカウント）。
+Environment `prod` を使うのは `apply` ジョブだけで、本物の Secrets もそこでしか使いません。
+Environment `prod` に同じ名前の Variable があると、`apply` ジョブではそちらが優先されます。
 
 Terraform の変数との対応:
 
 | Terraform 変数 | 値の出どころ |
 | --- | --- |
 | `environments/prod`: `project` / `region` | `GCP_PROJECT_ID` / `GCP_REGION` |
-| `environments/prod`: `riot_api_key` / `x_app_credentials` / `accounts` | Secrets（`TF_VAR_*`）。書き込み専用で Secret Manager に書き込まれ、plan と state には残らない |
+| `environments/prod`: `riot_api_key` / `x_app_credentials` / `accounts` | apply では Secrets（`TF_VAR_*`）。書き込み専用で Secret Manager に書き込まれ、plan と state には残らない。plan では値を比べないため、ダミー値を渡す |
 | `bootstrap/prod`: `project` / `github_repository` / `tf_state_bucket` | ローカルでの apply 時に `-var` で指定 |
 | リソース名（`name`）・スケジュール・デプロイ用ブランチ・デプロイ用サービスアカウントのロールほか | 各ルートの `main.tf` のモジュール引数。変える場合は編集する |
 
@@ -114,7 +119,8 @@ fork の場合は Actions タブからワークフローを有効にしてくだ
 
 ### 4. 以降
 
-`main` に push すると `.github/workflows/deploy.yml` が `cloud_function/` を zip にして `terraform/environments/prod` を `terraform apply` します。
+`main` に push すると `.github/workflows/deploy.yml` が `cloud_function/` を zip にして `terraform/environments/prod` を plan し、変更があれば承認を待ってから `terraform apply` します。
+plan は実行のジョブのサマリー（`plan` ジョブ）に表示されるので、それを確認して承認します（Actions の実行画面の Review deployments）。変更がなければ承認も apply も行われません。
 初回のアプリのリソース作成も CI で行われます（Actions タブの Deploy から手動実行も可能。[手動実行](#手動実行)）。
 ソースが変わると GCS 上のオブジェクト名（内容ハッシュ）が変わり、関数が再デプロイされます。
 `environments/prod` の変更も同様に push で反映し、ローカルからの plan / apply は行いません。
@@ -124,7 +130,8 @@ fork の場合は Actions タブからワークフローを有効にしてくだ
 
 Actions タブの Deploy（`workflow_dispatch`）から、その時点の `main` の先頭を push と同じ手順でデプロイできます。
 デプロイできるのは `main` から実行したときだけです。
-他のブランチやタグから実行すると、`deploy` ジョブは Environment `prod` のブランチ制限に拒否されて失敗します（ステップは 1 つも実行されず、Secrets も渡らない。`release` もスキップされ、タグは付かない）。
+他のブランチやタグから実行すると、`plan` ジョブが GCP の認証で WIF に拒否されて失敗し、`apply` と `release` はスキップされます（Secrets は渡らず、タグも付かない）。
+`apply` ジョブは Environment `prod` のブランチ制限でも拒否されるため、plan が通っても `main` 以外からは apply されません。
 手動実行は実行元に選んだブランチやタグにある `deploy.yml` で動くため、ワークフローを書き換えたブランチからでも同じです（GCP 側でも WIF が `main` 以外を拒否する。[セキュリティ](#セキュリティ)）。
 
 | 場面 | 手段 |
@@ -136,6 +143,7 @@ Actions タブの Deploy（`workflow_dispatch`）から、その時点の `main`
 | Secret の値の更新 | 番号を上げる PR（[Secret の登録と更新](#secret-の登録と更新)）。手動実行しても新しいバージョンは書き込まれない |
 | 以前のバージョンに戻す | revert のコミットを `main` に push する。タグからの手動実行は失敗する（上記） |
 
+- 承認を待っている実行も `concurrency` グループを使い続けるため、承認待ちを放置すると後の実行が進みません。承認するか、却下（Reject）してください。却下した実行は apply も release も行われません。
 - push による実行と同じ `concurrency` グループで動きます。実行中のデプロイがあれば終わるまで待ちますが、待てるのは 1 件だけで、さらに次の実行が入ると先に待っていたほうはキャンセルされます。後の実行が `main` からなら最新の `main` を含むため変更は漏れませんが、`main` 以外からの実行が入ると、待っていた `main` の実行がキャンセルされたまま、次の push か手動実行までデプロイされません。
 - 前回のリリース以降にリリース対象のコミット（`feat:` / `fix:` など。[リリースとバージョン](#リリースとバージョン)）がなければ `terraform apply` だけが行われ、リリースは作られません。前回のデプロイが失敗してリリースされていないコミットがあれば、まとめてリリースされます。
 
@@ -152,13 +160,14 @@ Actions タブの Deploy（`workflow_dispatch`）から、その時点の `main`
 
 - Pull Request は squash merge するため、**PR のタイトル**（コミットが 1 つの PR ではそのコミットのメッセージ）を上の形式にします。
 - 最初のリリースは `v1.0.0` です。
-- `deploy.yml` は次の 3 つのジョブで動きます。デプロイに失敗したコミットにはタグが付きません。
+- `deploy.yml` は次の 4 つのジョブで動きます。デプロイに失敗した（または承認されなかった）コミットにはタグが付きません。
 
   | ジョブ | 内容 |
   | --- | --- |
   | `version` | 次のバージョンを計算する（dry-run。タグは作らない） |
-  | `deploy` | `version` が成功し、`DEPLOY_ENABLED` が `true` のときに `terraform apply` する（`main` 以外からの実行は Environment `prod` に拒否される） |
-  | `release` | `deploy` が成功したら、そのコミットにタグと Release を作り、`version` で計算したバージョンと一致するかを確認する |
+  | `plan` | `version` が成功し、`DEPLOY_ENABLED` が `true` のときにデプロイ用サービスアカウントで `terraform plan` し、plan をジョブのサマリーに表示する（Secrets はダミー値） |
+  | `apply` | plan に変更があり、Environment `prod` の Required reviewers が承認したら、その plan ファイルを `terraform apply` する（`main` 以外からの実行は Environment `prod` に拒否される） |
+  | `release` | `apply` が成功したとき（または変更がなく `apply` をスキップしたとき）に、そのコミットにタグと Release を作り、`version` で計算したバージョンと一致するかを確認する |
 
 - 実行中に `main` へ次の push が入ると、`release` はリリースを見送り（警告のみ）、次の実行がまとめてリリースします。
 - 設定は `.releaserc.json` にあります。semantic-release と conventionalcommits プリセットのバージョンは `deploy.yml` の `env` で固定しています。Dependabot では更新されないため、手で上げます。
@@ -223,6 +232,9 @@ Riot の Development キーは 24 時間で失効するため、Development キ�
   - Pull Request（`pull_request` イベント）の実行が使えるのは、`terraform plan` 用の読み取り専用サービスアカウント（`roles/viewer` と tfstate 用バケットの読み取りのみ）だけです。WIF 側ではマージ先のブランチを制限しておらず、`main` 向けに限っているのはワークフロー（`pre_deploy.yml`）のトリガーです。
   - fork からの Pull Request には GitHub が OIDC トークンを発行しないため認証できません。`pull_request_target` も拒否します。
 - ワークフローは `pull_request` では実行せず、Environment `prod` は `main` ブランチからのみ使用できます。
+- `deploy.yml` で OIDC トークンを取得できる（`id-token: write`）のは `plan` と `apply` のジョブだけです。npm のパッケージを実行時にインストールする `version` / `release`（semantic-release）では取得できないため、その依存が乗っ取られても GCP には届きません。
+- 本物の Secrets を使えるのは、Environment `prod` の `apply` ジョブだけです（`plan` はダミー値）。Required reviewers を設定すると、apply と Secrets の利用は承認後に限られます。
+  ただし、WIF のデプロイ用サービスアカウントの条件はブランチ（`main`）だけで Environment を見ていないため、承認は「`main` のワークフローがデプロイ用サービスアカウントを使うこと」自体は止めません（`plan` ジョブも承認なしで使う）。
 - デプロイ用サービスアカウントのロールは `roles/editor` と `roles/pubsub.admin`（Cloud Scheduler が topic に publish するための権限付与に必要）のみです。プロジェクトの IAM や WIF は変更できません。
 - Secret Manager の Secret に対して、デプロイ用サービスアカウントはバージョンの追加・破棄のみ、関数の実行用サービスアカウントは読み取りのみ可能です。
 
