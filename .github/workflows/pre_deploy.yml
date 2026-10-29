@@ -45,6 +45,8 @@ jobs:
     permissions:
       contents: read
       id-token: write
+      # To post the plan as a PR comment
+      pull-requests: write
     defaults:
       run:
         shell: bash
@@ -98,6 +100,39 @@ jobs:
         terraform init -reconfigure -input=false \
           -backend-config="bucket=$TF_STATE_BUCKET" \
           -backend-config="prefix=terraform/state"
-        terraform plan -lock=false -input=false -no-color \
+        terraform plan -lock=false -input=false -no-color -out=tfplan \
           -var="project=$GCP_PROJECT_ID" \
           -var="region=$GCP_REGION"
+
+    # Keeps one comment per PR up to date (edits the bot's last comment instead of adding a new one on every push).
+    # GitHub rejects comments over 65536 characters, so the plan is cut off before that.
+    - name: Comment plan on PR
+      working-directory: terraform/environments/prod
+      env:
+        GH_TOKEN: ${{ github.token }}
+        GH_REPO: ${{ github.repository }}
+        PR_NUMBER: ${{ github.event.pull_request.number }}
+        HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+      run: |
+        terraform show -no-color tfplan > plan.txt
+        {
+          echo "## Terraform plan (environments/prod)"
+          echo
+          echo "Commit: ${HEAD_SHA}"
+          echo
+          # "Plan: N to add, ..." or "No changes. ..." so the result is visible without opening the details
+          grep -m1 -E '^(Plan:|No changes\.)' plan.txt || true
+          echo
+          echo '<details><summary>Show plan</summary>'
+          echo
+          echo '```'
+          head -c 60000 plan.txt
+          echo '```'
+          if [ "$(wc -c < plan.txt)" -gt 60000 ]; then
+            echo
+            echo "The plan was truncated. See the full output in the workflow log: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          fi
+          echo
+          echo '</details>'
+        } > comment.md
+        gh pr comment "$PR_NUMBER" --body-file comment.md --edit-last --create-if-none

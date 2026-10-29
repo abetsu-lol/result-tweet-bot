@@ -277,6 +277,7 @@ python -m venv .venv
 
 Riot API・GCS・Secret Manager は偽物に差し替えて実行します（通信しない）。
 `main` 向けの Pull Request では、`pre_deploy.yml` が pytest と Terraform の fmt / validate / plan（`environments/prod`、plan 用サービスアカウントで `-lock=false`）を実行します。
+plan の結果は Pull Request にコメントします（1 つのコメントを push のたびに上書き）。
 
 依存ライブラリは `==` で固定し（デプロイのたびに中身が変わらないようにするため）、固定した時点の最新版を選んでいます。以後の更新は Dependabot の PR で行います。
 
