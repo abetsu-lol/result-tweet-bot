@@ -114,15 +114,15 @@ def test_switching_from_weekly_to_daily_picks_up_where_the_last_post_ended():
 
 def test_many_games_fit_on_one_post_with_taller_images():
     start = datetime(2026, 10, 19, 12, 30, tzinfo=JST)
-    games = [game(f"JP1_{i}", start + timedelta(minutes=30 * i)) for i in range(33)]
+    games = [game(f"JP1_{i}", start + timedelta(minutes=10 * i)) for i in range(81)]
     bucket = bucket_with(games)
     result, x = run(bucket, DRY_RUN="false")
     assert result.posts == 1 and len(x.posts) == 1
     assert len(x.posts[0]["media_ids"]) == 4
 
 
-@pytest.mark.parametrize("count,sizes", [(1, [1]), (8, [8]), (9, [5, 4]), (12, [6, 6]), (32, [8, 8, 8, 8]),
-                                         (33, [9, 9, 9, 6]), (100, [25, 25, 25, 25])])
+@pytest.mark.parametrize("count,sizes", [(1, [1]), (10, [10]), (20, [20]), (21, [11, 10]), (30, [15, 15]),
+                                         (80, [20, 20, 20, 20]), (81, [21, 21, 21, 18]), (100, [25, 25, 25, 25])])
 def test_paginate_spreads_rows_evenly_over_at_most_four_images(count, sizes):
     assert [len(page) for page in publish.paginate(list(range(count)))] == sizes
 
@@ -221,3 +221,13 @@ def test_post_without_a_stored_rank_has_no_rank_line():
     bucket = bucket_with([game("JP1_1", datetime(2026, 10, 19, 20, tzinfo=JST))])
     _, x = run(bucket, DRY_RUN="false")
     assert "ランク:" not in x.posts[0]["text"]
+
+
+def test_post_text_shows_the_rank_change_over_the_period():
+    bucket = bucket_with([game("JP1_1", datetime(2026, 10, 19, 20, tzinfo=JST))])
+    bucket.objects["ranks/main/2026-10-19.json"] = {"solo_duo": {"tier": "GOLD", "rank": "II", "league_points": 45,
+                                                                 "wins": 1, "losses": 1}}
+    bucket.objects["ranks/main/2026-10-20.json"] = {"solo_duo": {"tier": "GOLD", "rank": "I", "league_points": 4,
+                                                                 "wins": 2, "losses": 1}}
+    _, x = run(bucket, DRY_RUN="false")
+    assert x.posts[0]["text"].splitlines()[-1] == "ランク: ゴールド II 45LP → ゴールド I 4LP（+59LP）"

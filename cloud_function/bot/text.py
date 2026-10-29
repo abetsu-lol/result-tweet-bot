@@ -44,30 +44,55 @@ TIERS_JA = {
     "EMERALD": "エメラルド", "DIAMOND": "ダイヤモンド", "MASTER": "マスター", "GRANDMASTER": "グランドマスター",
     "CHALLENGER": "チャレンジャー",
 }
-APEX_TIERS = ("MASTER", "GRANDMASTER", "CHALLENGER")  # no divisions
+APEX_TIERS = ("MASTER", "GRANDMASTER", "CHALLENGER")  # no divisions; LP keeps counting from Master 0
+LADDER_TIERS = ["IRON", "BRONZE", "SILVER", "GOLD", "PLATINUM", "EMERALD", "DIAMOND"]  # 4 divisions each
+DIVISIONS = ["IV", "III", "II", "I"]
 
 
-def rank_line(snapshot):
-    """"ランク: ゴールド II 45LP"; "ランク: なし" when unranked; None when no snapshot was stored."""
-    if snapshot is None:
-        return None
-    rank = snapshot.get("solo_duo")
+def ladder_points(rank):
+    """LP counted from Iron IV 0LP (100 per division, 400 per tier), so ranks can be subtracted."""
+    if rank["tier"] in APEX_TIERS:
+        return len(LADDER_TIERS) * 400 + rank["league_points"]
+    return LADDER_TIERS.index(rank["tier"]) * 400 + DIVISIONS.index(rank["rank"]) * 100 + rank["league_points"]
+
+
+def rank_label(rank):
+    """"ゴールド II 45LP", or "なし" when unranked."""
     if not rank:
-        return "ランク: なし"
+        return "なし"
     tier = TIERS_JA.get(rank["tier"], rank["tier"])
     division = "" if rank["tier"] in APEX_TIERS else f" {rank['rank']}"
-    return f"ランク: {tier}{division} {rank['league_points']}LP"
+    return f"{tier}{division} {rank['league_points']}LP"
 
 
-def summary(label, records, rank_snapshot=None):
-    """First post's text: the period, the win-loss record, averages and the rank at the end."""
+def rank_line(end_snapshot, start_snapshot=None):
+    """Rank at the end of the period, with the start and the LP change when the start is known.
+
+    "ランク: ゴールド II 45LP → ゴールド I 4LP（+59LP）"; just the end when no start snapshot was
+    stored; None when there is no end snapshot either.
+    """
+    if end_snapshot is None:
+        return None
+    end = end_snapshot.get("solo_duo")
+    if start_snapshot is None:
+        return f"ランク: {rank_label(end)}"
+    start = start_snapshot.get("solo_duo")
+    line = f"ランク: {rank_label(start)} → {rank_label(end)}"
+    if start and end:
+        change = ladder_points(end) - ladder_points(start)
+        line += f"（{'±0' if change == 0 else f'{change:+d}'}LP）"
+    return line
+
+
+def summary(label, records, rank_snapshot=None, start_rank_snapshot=None):
+    """First post's text: the period, the win-loss record, averages and the rank change."""
     wins = sum(1 for r in records if r["metrics"]["win"])
     losses = len(records) - wins
     gold = average([r["metrics"]["gold_diff_15"] for r in records])
     kp = average([r["metrics"]["kill_participation"] for r in records])
     lines = [f"{label} ソロランク {wins}勝{losses}敗",
              f"平均 GD@15 {signed(None if gold is None else round(gold))} / KP {percent(kp)}"]
-    rank = rank_line(rank_snapshot)
+    rank = rank_line(rank_snapshot, start_rank_snapshot)
     return "\n".join(lines + ([rank] if rank else []))
 
 
