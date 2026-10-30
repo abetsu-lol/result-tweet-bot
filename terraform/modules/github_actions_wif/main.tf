@@ -59,11 +59,12 @@ resource "google_iam_workload_identity_pool_provider" "github" {
     "google.subject"       = "assertion.sub"
     "attribute.repository" = "assertion.repository"
     "attribute.ref"        = "assertion.ref"
+    "attribute.event_name" = "assertion.event_name"
   }
 
-  // Only tokens issued for this repository's deploy branch are accepted, so forks and
-  // other branches (including pull requests) can never obtain credentials here.
-  attribute_condition = "assertion.repository == '${var.github_repository}' && assertion.ref == 'refs/heads/${var.deploy_branch}'"
+  // Only tokens issued for this repository are accepted. Which service account each run may
+  // impersonate is decided by the bindings below (by branch or by event).
+  attribute_condition = "assertion.repository == '${var.github_repository}'"
 }
 
 // Service account that GitHub Actions impersonates to deploy
@@ -81,15 +82,49 @@ resource "google_project_iam_member" "deployer_roles" {
   member  = "serviceAccount:${google_service_account.deployer.email}"
 }
 
-// Lets runs of the repository impersonate the deployer
-resource "google_service_account_iam_member" "github_actions" {
+// Lets only runs on the deploy branch impersonate the deployer
+resource "google_service_account_iam_member" "deploy_github_actions" {
   service_account_id = google_service_account.deployer.name
   role               = "roles/iam.workloadIdentityUser"
 
-  member = format("principalSet://iam.googleapis.com/projects/%s/locations/global/workloadIdentityPools/%s/attribute.repository/%s",
+  member = format("principalSet://iam.googleapis.com/projects/%s/locations/global/workloadIdentityPools/%s/attribute.ref/refs/heads/%s",
     data.google_project.project.number,
     google_iam_workload_identity_pool.github.workload_identity_pool_id,
-    var.github_repository
+    var.deploy_branch
+  )
+
+  depends_on = [google_iam_workload_identity_pool_provider.github]
+}
+
+// service account for Github Actions contain teraffrom code validation and python code test
+resource "google_service_account" "planner" {
+  project      = var.project
+  account_id   = "${var.name}-planner"
+  display_name = "Validater for ${var.github_repository} (GitHub Actions via WIF)"
+}
+
+// Lets the planner read the environment state. It runs plan with -lock=false, so it needs no write access.
+resource "google_storage_bucket_iam_member" "planner_state_reader" {
+  bucket = var.tf_state_bucket
+  role   = "roles/storage.objectViewer"
+  member = "serviceAccount:${google_service_account.planner.email}"
+}
+
+resource "google_project_iam_member" "planner_roles" {
+  for_each = toset(var.planner_roles)
+
+  project = var.project
+  role    = each.value
+  member  = "serviceAccount:${google_service_account.planner.email}"
+}
+
+resource "google_service_account_iam_member" "plan_github_actions" {
+  service_account_id = google_service_account.planner.name
+  role               = "roles/iam.workloadIdentityUser"
+  // Matched by event rather than by subject, whose format depends on the repository's OIDC settings
+  member = format("principalSet://iam.googleapis.com/projects/%s/locations/global/workloadIdentityPools/%s/attribute.event_name/pull_request",
+    data.google_project.project.number,
+    google_iam_workload_identity_pool.github.workload_identity_pool_id
   )
 
   depends_on = [google_iam_workload_identity_pool_provider.github]

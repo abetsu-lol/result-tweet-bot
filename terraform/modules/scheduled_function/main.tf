@@ -73,10 +73,11 @@ resource "google_storage_bucket" "source" {
 
 // The object name changes whenever the source changes, which is what makes the function redeploy.
 // It is derived from the source files rather than the zip, whose bytes vary between builds.
+// The exclusions match scripts/package_function.sh, so only files that are deployed count.
 locals {
   function_source_files = sort([
     for f in fileset(var.source_dir, "**") : f
-    if !strcontains(f, "__pycache__") && !endswith(f, ".pyc")
+    if !strcontains(f, "__pycache__") && !endswith(f, ".pyc") && !strcontains("/${f}", "/test/")
   ])
   function_source_hash = sha1(join("", [
     for f in local.function_source_files : "${f}:${filesha1("${var.source_dir}/${f}")}"

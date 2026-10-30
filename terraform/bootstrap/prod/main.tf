@@ -1,5 +1,5 @@
 // Prerequisites for CI, applied from a local machine by a project admin (initial setup and rare changes):
-// Workload Identity Federation and the deployer service account that GitHub Actions impersonates.
+// Workload Identity Federation and the deployer / planner service accounts that GitHub Actions impersonates.
 // Kept out of the CI-applied environment so that CI cannot change its own credentials or project IAM.
 terraform {
   required_version = ">= 1.7"
@@ -25,10 +25,14 @@ module "github_actions_wif" {
   name              = "result-tweet-bot"
   github_repository = var.github_repository
   deploy_branch     = "main"
+  tf_state_bucket   = var.tf_state_bucket
   deployer_roles = [
     "roles/editor",
     // editor cannot set IAM policies; needed for the Pub/Sub topic binding of Cloud Scheduler
     "roles/pubsub.admin",
+  ]
+  planner_roles = [
+    "roles/viewer",
   ]
 }
 

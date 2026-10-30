@@ -21,7 +21,8 @@ import os, sys, zipfile
 src, out = sys.argv[1], sys.argv[2]
 with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as zf:
     for dirpath, dirnames, filenames in os.walk(src):
-        dirnames[:] = sorted(d for d in dirnames if d != "__pycache__")
+        # test/ directories are for local runs only and are not deployed
+        dirnames[:] = sorted(d for d in dirnames if d not in ("__pycache__", "test"))
         for name in sorted(filenames):
             if name.endswith(".pyc"):
                 continue

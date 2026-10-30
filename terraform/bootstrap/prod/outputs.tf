@@ -15,3 +15,8 @@ output "runtime_service_account_email" {
 output "data_bucket_name" {
   value = module.function_runtime.data_bucket_name
 }
+
+// Set as the repository variable GCP_PLAN_SA_EMAIL
+output "planner_service_account_email" {
+  value = module.github_actions_wif.planner_service_account_email
+}
