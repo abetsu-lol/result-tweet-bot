@@ -61,6 +61,12 @@ def _cs(frame):
     return frame["minionsKilled"] + frame["jungleMinionsKilled"]
 
 
+def _runes(participant):
+    """Rune ids of the keystone (first pick of the primary path) and of the secondary path."""
+    primary, secondary = participant["perks"]["styles"]
+    return {"keystone": primary["selections"][0]["perk"], "sub_style": secondary["style"]}
+
+
 @metric("win")
 def win(ctx):
     return bool(ctx.me["win"])
@@ -79,6 +85,16 @@ def position(ctx):
 @metric("opponent_champion")
 def opponent_champion(ctx):
     return ctx.opponent["championName"] if ctx.opponent else None
+
+
+@metric("runes")
+def runes(ctx):
+    return _runes(ctx.me)
+
+
+@metric("opponent_runes")
+def opponent_runes(ctx):
+    return _runes(ctx.opponent) if ctx.opponent else None
 
 
 @metric("gold_diff_15")

@@ -9,6 +9,10 @@ def participant(pid, team, position, *, puuid=None, champion="Champ", kills=0, d
     return {
         "participantId": pid, "teamId": team, "teamPosition": position, "puuid": puuid or f"puuid-{pid}",
         "championName": champion, "kills": kills, "deaths": deaths, "assists": assists, "win": win,
+        "perks": {"styles": [
+            {"description": "primaryStyle", "style": 8100, "selections": [{"perk": 8112 + pid}, {"perk": 8126}]},
+            {"description": "subStyle", "style": 8200 + pid, "selections": [{"perk": 8226}, {"perk": 8210}]},
+        ]},
     }
 
 
