@@ -164,7 +164,7 @@ Riot の Development キーは 24 時間で失効するため、Development キ�
 - 429（レート制限）は `Retry-After` に従って待ってから再試行し、5xx は間隔を空けて再試行します。
 - すべてのリクエストに `User-Agent: result-tweet-bot/<version>` を付けます。
 - API キーは Secret Manager に保存し、実行時に読み込みます（コードやログには含めない）。
-- チャンピオンの日本語名とアイコンは Data Dragon（`ddragon.leagueoflegends.com`、API キー不要）から取得します。
+- チャンピオンの日本語名とアイコン、ルーンのアイコンは Data Dragon（`ddragon.leagueoflegends.com`、API キー不要）から取得します。
 
 ## セキュリティ
 
@@ -185,7 +185,7 @@ Riot の Development キーは 24 時間で失効するため、Development キ�
 | `bot/metrics.py` | 試合ごとの指標。`@metric("名前")` を付けた関数を追加すると、以後の試合に保存される |
 | `bot/publish.py` | 投稿するか（`POST_SCHEDULE`）と対象期間を決め、保存済みの指標から投稿を組み立てて固定ポストのリプライツリーに投稿する。`DRY_RUN` では投稿せず `previews/` に保存 |
 | `bot/render.py` / `bot/aggregate.py` / `bot/text.py` | 表の画像（試合ごと / チャンピオン別）、本文、X の文字数の数え方（日本語は 2）。試合ごとの表のレーンのアイコンは Pillow で描いた自作のもの（Riot の素材は使っていない） |
-| `bot/ddragon.py` | チャンピオンの日本語名とアイコン（Data Dragon） |
+| `bot/ddragon.py` | チャンピオンの日本語名とアイコン、ルーンのアイコン（Data Dragon） |
 | `bot/x.py` | X API（OAuth 1.0a、画像のアップロード、リプライ）。投稿は再試行しない |
 | `bot/period.py` | 日の区切り（12:00 JST。日付は区切りの開始日） |
 | `bot/riot.py` / `bot/gcp.py` / `bot/http.py` | Riot API、Secret Manager / GCS（REST）、HTTP の共通処理（User-Agent、429 / 5xx の再試行） |

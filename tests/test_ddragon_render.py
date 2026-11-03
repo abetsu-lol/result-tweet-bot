@@ -34,6 +34,13 @@ ROUTES = {
         "Ahri": {"id": "Ahri", "name": "アーリ", "image": {"full": "Ahri.png"}},
     }}),
     f"{BASE}/cdn/16.20.1/img/champion/Ahri.png": Response(content=b"icon"),
+    f"{BASE}/cdn/16.20.1/data/ja_JP/runesReforged.json": Response([{
+        "id": 8100, "icon": "perk-images/Styles/7200_Domination.png", "slots": [
+            {"runes": [{"id": 8112, "icon": "perk-images/Styles/Domination/Electrocute/Electrocute.png"}]},
+            {"runes": [{"id": 8126, "icon": "perk-images/Styles/Domination/CheapShot/CheapShot.png"}]},
+        ]}]),
+    f"{BASE}/cdn/img/perk-images/Styles/7200_Domination.png": Response(content=b"path"),
+    f"{BASE}/cdn/img/perk-images/Styles/Domination/Electrocute/Electrocute.png": Response(content=b"keystone"),
 }
 
 
@@ -52,6 +59,16 @@ def test_icons_are_fetched_once_and_unknown_ones_are_none():
     assert session.calls.count(f"{BASE}/cdn/16.20.1/img/champion/Ahri.png") == 1
 
 
+def test_rune_icons_cover_keystones_and_paths_and_are_fetched_once():
+    session = Session(ROUTES)
+    dd = DataDragon(session)
+    assert dd.rune_icon(8112) == b"keystone" and dd.rune_icon(8112) == b"keystone"
+    assert dd.rune_icon(8100) == b"path"
+    assert dd.rune_icon(1) is None
+    assert session.calls.count(f"{BASE}/cdn/img/perk-images/Styles/Domination/Electrocute/Electrocute.png") == 1
+    assert session.calls.count(f"{BASE}/cdn/16.20.1/data/ja_JP/runesReforged.json") == 1
+
+
 def metrics(champion, win, gold=100):
     return {"metrics": {"win": win, "champion": champion, "opponent_champion": "Zed", "gold_diff_15": gold,
                         "cs_diff_15": None, "kill_participation": 0.5, "kda_15": {"kills": 1, "deaths": 2, "assists": 3}}}
@@ -67,7 +84,7 @@ def test_images_have_one_row_per_item():
     games = [metrics("Ahri", i % 2 == 0, gold=None if i == 3 else 100 * i) for i in range(render.ROWS_PER_IMAGE)]
     image = Image.open(io.BytesIO(render.games_image("10/19 ソロランク", games, FakeChampions())))
     expected = render.TITLE_HEIGHT + render.HEADER_HEIGHT + render.ROW_HEIGHT * len(games) + render.PADDING
-    assert image.size == (render.WIDTH, expected)
+    assert image.size == (render.GAMES_WIDTH, expected)
 
     rows = aggregate.by_champion(games + [metrics("UnknownChamp", True)])
     image = Image.open(io.BytesIO(render.champions_image("10/13〜10/19", rows, FakeChampions())))
@@ -79,7 +96,7 @@ def test_long_champion_names_are_shrunk_to_fit():
         def name(self, champion):
             return "とてもながいチャンピオンのなまえ" * 2
     png = render.games_image("10/19", [metrics("Ahri", True)], LongNames())
-    assert Image.open(io.BytesIO(png)).size[0] == render.WIDTH
+    assert Image.open(io.BytesIO(png)).size[0] == render.GAMES_WIDTH
 
 
 def test_bundled_fonts_cover_every_character_drawn_on_images():
@@ -106,6 +123,17 @@ def test_lane_icons_are_distinct_and_unknown_positions_have_none():
 def test_support_highlights_no_lane_but_bottom_does():
     corner = (render.LANE_ICON - 7, render.LANE_ICON - 7)  # on the bottom lane's corner
     assert render.lane_icon("BOTTOM").getpixel(corner)[:3] != render.lane_icon("UTILITY").getpixel(corner)[:3]
+
+
+def test_rune_icons_are_drawn_when_known():
+    without = metrics("Ahri", True)
+    with_runes = metrics("Ahri", True)
+    with_runes["metrics"]["runes"] = {"keystone": 8112, "sub_style": 8200}
+    unknown = metrics("Ahri", True)
+    unknown["metrics"]["runes"] = {"keystone": FakeChampions.UNKNOWN_RUNE, "sub_style": FakeChampions.UNKNOWN_RUNE}
+    champions = FakeChampions()
+    assert render.games_image("10/19", [with_runes], champions) != render.games_image("10/19", [without], champions)
+    assert render.games_image("10/19", [unknown], champions) == render.games_image("10/19", [without], champions)
 
 
 def test_games_without_position_still_render():

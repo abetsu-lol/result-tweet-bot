@@ -13,11 +13,16 @@ MAX_ROWS_PER_IMAGE = 25  # beyond this the rows get too small to read
 ASSETS = Path(__file__).parent / "assets"
 
 WIDTH = 1200
+GAMES_WIDTH = 1350  # per_game layout: wider for the rune icons
 PADDING = 32
 TITLE_HEIGHT = 84
 HEADER_HEIGHT = 44
 ROW_HEIGHT = 64
 ICON = 44
+RUNE_ICON = 36
+RUNE_INSET = 3  # between the dark disc's edge and the icon
+RUNE_GAP = 2
+RUNE_DISC = (28, 30, 36)  # rune icons are made for dark backgrounds; the pale ones vanish on BACKGROUND
 
 BACKGROUND = (250, 250, 252)
 TEXT = (28, 30, 36)
@@ -96,10 +101,20 @@ def _diff_color(value):
     return WIN if value > 0 else LOSS
 
 
+@lru_cache(maxsize=None)
+def _rune_disc():
+    scale = 4  # draw large, then downsample for smooth edges
+    n = RUNE_ICON * scale
+    image = Image.new("RGBA", (n, n), (0, 0, 0, 0))
+    ImageDraw.Draw(image).ellipse((0, 0, n - 1, n - 1), fill=RUNE_DISC)
+    return image.resize((RUNE_ICON, RUNE_ICON), Image.LANCZOS)
+
+
 class _Canvas:
-    def __init__(self, title, rows):
+    def __init__(self, title, rows, width=WIDTH):
         height = TITLE_HEIGHT + HEADER_HEIGHT + ROW_HEIGHT * rows + PADDING
-        self.image = Image.new("RGB", (WIDTH, height), BACKGROUND)
+        self.width = width
+        self.image = Image.new("RGB", (width, height), BACKGROUND)
         self.draw = ImageDraw.Draw(self.image)
         self.draw.text((PADDING, 26), title, font=_font(34, bold=True), fill=TEXT)
 
@@ -107,7 +122,7 @@ class _Canvas:
         y = TITLE_HEIGHT + HEADER_HEIGHT // 2
         for x, label in columns:
             self.draw.text((x, y), label, font=_font(20), fill=MUTED, anchor="lm")
-        self.draw.line((PADDING, TITLE_HEIGHT + HEADER_HEIGHT, WIDTH - PADDING, TITLE_HEIGHT + HEADER_HEIGHT),
+        self.draw.line((PADDING, TITLE_HEIGHT + HEADER_HEIGHT, self.width - PADDING, TITLE_HEIGHT + HEADER_HEIGHT),
                        fill=RULE, width=2)
 
     def row_y(self, index):
@@ -127,6 +142,20 @@ class _Canvas:
             size -= 2
         self.text(x + ICON + 10, y, label, size=size)
 
+    def runes(self, x, y, champions, runes):
+        """Keystone and secondary path icons; nothing when unknown (e.g. games stored before runes were)."""
+        if not runes:
+            return
+        for i, rune_id in enumerate((runes["keystone"], runes["sub_style"])):
+            icon = champions.rune_icon(rune_id)
+            if icon:
+                left, top = x + i * (RUNE_ICON + RUNE_GAP), y - RUNE_ICON // 2
+                disc = _rune_disc()
+                self.image.paste(disc, (left, top), disc)
+                size = RUNE_ICON - 2 * RUNE_INSET
+                tile = Image.open(io.BytesIO(icon)).convert("RGBA").resize((size, size), Image.LANCZOS)
+                self.image.paste(tile, (left + RUNE_INSET, top + RUNE_INSET), tile)
+
     def lane(self, x, y, position):
         icon = lane_icon(position)
         if icon:
@@ -134,7 +163,7 @@ class _Canvas:
 
     def rule(self, index):
         y = TITLE_HEIGHT + HEADER_HEIGHT + ROW_HEIGHT * (index + 1)
-        self.draw.line((PADDING, y, WIDTH - PADDING, y), fill=RULE, width=1)
+        self.draw.line((PADDING, y, self.width - PADDING, y), fill=RULE, width=1)
 
     def png(self):
         out = io.BytesIO()
@@ -143,19 +172,21 @@ class _Canvas:
 
 
 def games_image(title, records, champions):
-    canvas = _Canvas(title, len(records))
-    canvas.header([(PADDING, "結果"), (90, "レーン"), (170, "チャンピオン"), (450, "対面"), (720, "KDA@15"),
-                   (850, "GD@15"), (970, "CSD@15"), (1090, "KP")])
+    canvas = _Canvas(title, len(records), GAMES_WIDTH)
+    canvas.header([(PADDING, "結果"), (90, "レーン"), (170, "チャンピオン"), (430, "ルーン"), (520, "対面"), (780, "ルーン"),
+                   (870, "KDA@15"), (1000, "GD@15"), (1120, "CSD@15"), (1240, "KP")])
     for i, record in enumerate(records):
         m, y = record["metrics"], canvas.row_y(i)
         canvas.text(PADDING, y, "勝" if m["win"] else "負", size=28, bold=True, fill=WIN if m["win"] else LOSS)
         canvas.lane(98, y, m.get("position"))
-        canvas.champion(170, y, champions, m["champion"], 220)
-        canvas.champion(450, y, champions, m["opponent_champion"], 210)
-        canvas.text(720, y, kda(m["kda_15"]))
-        canvas.text(850, y, signed(m["gold_diff_15"]), fill=_diff_color(m["gold_diff_15"]))
-        canvas.text(970, y, signed(m["cs_diff_15"]), fill=_diff_color(m["cs_diff_15"]))
-        canvas.text(1090, y, percent(m["kill_participation"]))
+        canvas.champion(170, y, champions, m["champion"], 196)
+        canvas.runes(430, y, champions, m.get("runes"))
+        canvas.champion(520, y, champions, m["opponent_champion"], 196)
+        canvas.runes(780, y, champions, m.get("opponent_runes"))
+        canvas.text(870, y, kda(m["kda_15"]))
+        canvas.text(1000, y, signed(m["gold_diff_15"]), fill=_diff_color(m["gold_diff_15"]))
+        canvas.text(1120, y, signed(m["cs_diff_15"]), fill=_diff_color(m["cs_diff_15"]))
+        canvas.text(1240, y, percent(m["kill_participation"]))
         canvas.rule(i)
     return canvas.png()
 

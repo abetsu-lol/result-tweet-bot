@@ -43,9 +43,17 @@ def test_kill_participation_without_team_kills_is_zero():
     assert metrics.kill_participation(ctx) == 0.0
 
 
+def test_runes_are_the_keystone_and_the_secondary_path():
+    result = metrics.compute(context())  # me is participant 3, my opponent participant 8
+    assert result["runes"] == {"keystone": 8115, "sub_style": 8203}
+    assert result["opponent_runes"] == {"keystone": 8120, "sub_style": 8208}
+
+
 def test_unknown_position_leaves_lane_metrics_empty():
     result = metrics.compute(context(match=f.match(me_position="")))
     assert result["opponent_champion"] is None
+    assert result["opponent_runes"] is None
+    assert result["runes"] == {"keystone": 8115, "sub_style": 8203}
     assert result["gold_diff_15"] is None
     assert result["cs_diff_15"] is None
 

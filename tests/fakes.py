@@ -69,6 +69,7 @@ class FakeBucket:
 class FakeChampions:
     """Data Dragon stand-in: Japanese names from a small table, a tiny icon for known ones."""
     NAMES = {"Ahri": "アーリ", "Zed": "ゼド", "Garen": "ガレン"}
+    UNKNOWN_RUNE = -1
 
     def __init__(self):
         from io import BytesIO
@@ -82,6 +83,9 @@ class FakeChampions:
 
     def icon(self, champion):
         return self.icon_png if champion in self.NAMES else None
+
+    def rune_icon(self, rune_id):
+        return self.icon_png if rune_id != self.UNKNOWN_RUNE else None
 
 
 class FakeX:
